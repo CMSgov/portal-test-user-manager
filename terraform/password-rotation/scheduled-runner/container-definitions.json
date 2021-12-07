@@ -1,0 +1,31 @@
+[
+  {
+    "name": "${app_name}-${environment}-${task_name}",
+    "image": "${repo_url}:${image}",
+    "environment": [
+      { "name": "S3_BUCKET", "value": "${s3_bucket}" },
+      { "name": "S3_KEY", "value": "${s3_key}" },
+      { "name": "FILENAME", "value": "${file_name}" },
+      { "name": "SHEETNAME", "value": "${sheet_name}" },
+      { "name": "USERNAMEHEADER", "value": "${username_header}" },
+      { "name": "PASSWORDHEADER", "value": "${password_header}" },
+      { "name": "ENVIRONMENT", "value": "${portal_environment}" },
+      { "name": "PORTALHOSTNAME", "value": "${portal_hostname}" },
+      { "name": "IDMHOSTNAME", "value": "${idm_hostname}" }
+    ],
+    "secrets": [
+      {
+        "valueFrom": "${sheet_password_name}",
+        "name": "SHEETPASSWORD"
+      }
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "${awslogs_group}",
+        "awslogs-region": "${awslogs_region}",
+        "awslogs-stream-prefix": "ecs"
+      }
+    }
+  }
+]

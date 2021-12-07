@@ -45,6 +45,41 @@ variable "schedule_task_expression" {
 }
 
 variable "ecs_subnet_ids" {
-  description = "Subnet IDs for the ECS task."
   type        = list(string)
+  description = "Subnet IDs for the ECS task."
+}
+
+variable "file_name" {
+  type        = string
+  description = "File name for the test user spreadsheet"
+}
+
+variable "sheet_name" {
+  type        = string
+  description = "Sheet name for the test user spreadsheet"
+}
+
+variable "username_header" {
+  type        = string
+  description = "Username header for the test user spreadsheet"
+}
+
+variable "password_header" {
+  type        = string
+  description = "Password header for the test user spreadsheet"
+}
+
+variable "portal_environment" {
+  type        = string
+  description = "Target environment for the CMS Enterprise Portal"
+}
+
+variable "portal_hostname" {
+  type        = string
+  description = "Hostname for the CMS Enterprise Portal"
+}
+
+variable "idm_hostname" {
+  type        = string
+  description = "Hostname for CMS Enterprise Portal IDM "
 }

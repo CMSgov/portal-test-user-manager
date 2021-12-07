@@ -32,17 +32,19 @@ data "aws_iam_policy_document" "events_assume_role_policy" {
 }
 
 resource "aws_iam_role" "cloudwatch_target_role" {
-  name                 = "cw-target-role-${var.app_name}-${var.environment}-${var.task_name}"
-  description          = "Role allowing CloudWatch Events to run the task"
-  assume_role_policy   = data.aws_iam_policy_document.events_assume_role_policy.json
+  name               = "cw-target-role-${var.app_name}-${var.environment}-${var.task_name}"
+  description        = "Role allowing CloudWatch Events to run the task"
+  assume_role_policy = data.aws_iam_policy_document.events_assume_role_policy.json
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
+resource "aws_iam_role_policy_attachment" "container_service_events" {
   role       = aws_iam_role.cloudwatch_target_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceEventsRole"
 }
 
 ## ECS roles
+
+# Trust relationship for task roles
 
 data "aws_iam_policy_document" "ecs_assume_role_policy" {
   statement {
@@ -65,20 +67,21 @@ resource "aws_iam_role" "task_role" {
   assume_role_policy = data.aws_iam_policy_document.ecs_assume_role_policy.json
 }
 
+# TODO uncomment when providing s3 role variable 
 
-resource "aws_iam_policy" "assume_ia_operations_role" {
-  name   = "${var.appname}-${var.env}-assume-ia-operations-role"
-  policy = <<POLICY
-{
-  "Version": "2012-10-17",
-  "Statement": {
-    "Effect": "Allow",
-    "Action": "sts:AssumeRole",
-    "Resource": "${var.s3_access_role_arn}"
-  }
-}
-POLICY
-}
+# resource "aws_iam_policy" "assume_s3_role" {
+#   name   = "${var.app_name}-${var.environment}-assume-s3-role"
+#   policy = <<POLICY
+# {
+#   "Version": "2012-10-17",
+#   "Statement": {
+#     "Effect": "Allow",
+#     "Action": "sts:AssumeRole",
+#     "Resource": "${var.s3_access_role_arn}"
+#   }
+# }
+# POLICY
+# }
 
 # ECS task execution role
 
@@ -93,17 +96,13 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
-  role       = aws_iam_role.task_execution_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
 ## CloudWatch ##
 
 resource "aws_cloudwatch_event_rule" "run_command" {
   name                = "${var.task_name}-${var.environment}"
   description         = "Scheduled task for ${var.task_name} in ${var.environment}"
   schedule_expression = var.schedule_task_expression
+  is_enabled = false
 }
 
 resource "aws_cloudwatch_event_target" "ecs_scheduled_task" {
@@ -120,8 +119,8 @@ resource "aws_cloudwatch_event_target" "ecs_scheduled_task" {
     task_definition_arn = aws_ecs_task_definition.scheduled_task_def.arn
 
     network_configuration {
-      subnets          = var.ecs_subnet_ids
-      security_groups  = [aws_security_group.ecs_sg.id]
+      subnets         = var.ecs_subnet_ids
+      security_groups = [aws_security_group.ecs_sg.id]
     }
   }
 }
@@ -131,7 +130,7 @@ resource "aws_cloudwatch_event_target" "ecs_scheduled_task" {
 # ECR repo
 
 resource "aws_ecr_repository" "app" {
-  name                 = var.appname
+  name                 = var.app_name
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
@@ -155,7 +154,6 @@ resource "aws_security_group" "ecs_sg" {
   tags = {
     Name        = "ecs-${var.app_name}-${var.environment}"
     Environment = var.environment
-    Automation  = "Terraform"
   }
 }
 
@@ -183,16 +181,25 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
   task_role_arn      = aws_iam_role.task_execution_role.arn
   execution_role_arn = aws_iam_role.task_execution_role.arn
 
-  container_definitions = templatefile("${path.module}/container-definitions.tpl",
+  container_definitions = templatefile("${path.module}/container-definitions.json",
     {
-      app_name       = var.app_name,
-      environment    = var.environment,
-      task_name      = var.task_name,
-      image          = var.image
-      s3_bucket      = var.s3_bucket,
-      s3_key         = var.s3_key,
-      awslogs_group  = local.awslogs_group,
-      awslogs_region = data.aws_region.current.name
+      app_name            = var.app_name,
+      task_name           = var.task_name,
+      environment         = var.environment,
+      repo_url            = aws_ecr_repository.app.repository_url
+      image               = var.image
+      s3_bucket           = var.s3_bucket,
+      s3_key              = var.s3_key,
+      file_name           = var.file_name
+      sheet_name          = var.sheet_name
+      username_header     = var.username_header
+      password_header     = var.password_header
+      portal_environment  = var.portal_environment
+      portal_hostname     = var.portal_hostname
+      idm_hostname        = var.idm_hostname
+      sheet_password_name = aws_ssm_parameter.sheet_password.name
+      awslogs_group       = local.awslogs_group,
+      awslogs_region      = data.aws_region.current.name
     }
   )
 }
@@ -200,5 +207,17 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
 # CloudWatch log group
 
 resource "aws_cloudwatch_log_group" "ecs" {
-  name = locals.awslogs_group
+  name = local.awslogs_group
+}
+
+# Systems Manager parameter 
+
+resource "aws_ssm_parameter" "sheet_password" {
+  name  = "${var.app_name}-${var.environment}-sheet-password"
+  type  = "SecureString"
+  value = "setmanually"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
 }
