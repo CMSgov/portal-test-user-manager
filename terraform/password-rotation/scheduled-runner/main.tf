@@ -96,13 +96,39 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_policy" "parameter_store" {
+  name   = "${var.app_name}-${var.environment}-${var.task_name}-parameter-store"
+  policy = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameters"
+      ],
+      "Resource": [
+        "${aws_ssm_parameter.sheet_password.arn}"
+      ]
+    }
+  ]
+}
+POLICY
+}
+
+resource "aws_iam_policy_attachment" "parameter_store" {
+  name       = "${var.app_name}-${var.environment}-${var.task_name}-parameter-store"
+  roles      = [aws_iam_role.task_execution_role.name]
+  policy_arn = aws_iam_policy.parameter_store.arn
+}
+
 ## CloudWatch ##
 
 resource "aws_cloudwatch_event_rule" "run_command" {
   name                = "${var.task_name}-${var.environment}"
   description         = "Scheduled task for ${var.task_name} in ${var.environment}"
   schedule_expression = var.schedule_task_expression
-  is_enabled = false
+  is_enabled = var.event_rule_enabled
 }
 
 resource "aws_cloudwatch_event_target" "ecs_scheduled_task" {
@@ -178,7 +204,7 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
   cpu                      = "256"
   memory                   = "1024"
 
-  task_role_arn      = aws_iam_role.task_execution_role.arn
+  task_role_arn      = aws_iam_role.task_role.arn
   execution_role_arn = aws_iam_role.task_execution_role.arn
 
   container_definitions = templatefile("${path.module}/container-definitions.json",
@@ -215,7 +241,7 @@ resource "aws_cloudwatch_log_group" "ecs" {
 resource "aws_ssm_parameter" "sheet_password" {
   name  = "${var.app_name}-${var.environment}-sheet-password"
   type  = "SecureString"
-  value = "setmanually"
+  value = "set_manually_after_creation"
 
   lifecycle {
     ignore_changes = [value]

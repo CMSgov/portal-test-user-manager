@@ -23,6 +23,22 @@ variable "ecs_vpc_id" {
   description = "VPC ID to be used by ECS"
 }
 
+
+variable "ecs_subnet_ids" {
+  type        = list(string)
+  description = "Subnet IDs for the ECS task."
+}
+
+variable "schedule_task_expression" {
+  type        = string
+  description = "Cron based schedule task to run on a cadence"
+}
+
+variable "event_rule_enabled" {
+  type = bool
+  description = "Whether the event rule that triggers the task is enabled"
+}
+
 variable "s3_bucket" {
   type        = string
   description = "S3 bucket that contains the test user spreadsheet"
@@ -37,16 +53,6 @@ variable "s3_key" {
 variable "s3_access_role_arn" {
   type        = string
   description = "The ARN of the cross-account role that grants access to the S3 bucket"
-}
-
-variable "schedule_task_expression" {
-  type        = string
-  description = "Cron based schedule task to run on a cadence"
-}
-
-variable "ecs_subnet_ids" {
-  type        = list(string)
-  description = "Subnet IDs for the ECS task."
 }
 
 variable "file_name" {
