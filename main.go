@@ -132,6 +132,7 @@ func resetPasswords(f *excelize.File, config *Portal) (err error) {
 					ts, config.SheetName, i+rowOffset+sheetOffset, name, err)
 				return err
 			}
+
 			config.infoLog.Printf("%s: rotation complete", row[user])
 		}
 	}
@@ -198,6 +199,11 @@ func main() {
 	}
 
 	err = resetPasswords(f, portal)
+	if err != nil {
+		errorLog.Fatal(err)
+	}
+
+	err = updateMacFinUsers(f, portal)
 	if err != nil {
 		errorLog.Fatal(err)
 	}
