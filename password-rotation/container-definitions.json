@@ -1,7 +1,7 @@
 [
   {
     "name": "${app_name}-${environment}-${task_name}",
-    "image": "${repo_url}:${image}",
+    "image": "${repo_url}:${image_tag}",
     "environment": [
       { "name": "S3_BUCKET", "value": "${s3_bucket}" },
       { "name": "S3_KEY", "value": "${s3_key}" },

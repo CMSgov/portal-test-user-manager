@@ -62,26 +62,27 @@ data "aws_iam_policy_document" "ecs_assume_role_policy" {
 # ECS task role
 
 resource "aws_iam_role" "task_role" {
-  name               = "ecs-task-role-${var.app_name}-${var.environment}-${var.task_name}"
-  description        = "Role granting permissions to the ECS container task"
-  assume_role_policy = data.aws_iam_policy_document.ecs_assume_role_policy.json
+  name                = "ecs-task-role-${var.app_name}-${var.environment}-${var.task_name}"
+  description         = "Role granting permissions to the ECS container task"
+  assume_role_policy  = data.aws_iam_policy_document.ecs_assume_role_policy.json
+  managed_policy_arns = [aws_iam_policy.s3_access.arn]
+  # enables changing policy attachments without first manually detaching in the AWS console
+  force_detach_policies = true
 }
 
-# TODO uncomment when providing s3 role variable 
+data "aws_iam_policy_document" "s3_access" {
+  statement {
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["arn:aws:s3:::${var.s3_bucket}/${var.s3_key}", ]
+    effect    = "Allow"
+  }
+}
 
-# resource "aws_iam_policy" "assume_s3_role" {
-#   name   = "${var.app_name}-${var.environment}-assume-s3-role"
-#   policy = <<POLICY
-# {
-#   "Version": "2012-10-17",
-#   "Statement": {
-#     "Effect": "Allow",
-#     "Action": "sts:AssumeRole",
-#     "Resource": "${var.s3_access_role_arn}"
-#   }
-# }
-# POLICY
-# }
+resource "aws_iam_policy" "s3_access" {
+  name        = "${var.s3_bucket}-s3-access"
+  description = "Policy granting access to the S3 bucket containing the test user spreadsheet"
+  policy      = data.aws_iam_policy_document.s3_access.json
+}
 
 # ECS task execution role
 
@@ -128,7 +129,7 @@ resource "aws_cloudwatch_event_rule" "run_command" {
   name                = "${var.task_name}-${var.environment}"
   description         = "Scheduled task for ${var.task_name} in ${var.environment}"
   schedule_expression = var.schedule_task_expression
-  is_enabled = var.event_rule_enabled
+  is_enabled          = var.event_rule_enabled
 }
 
 resource "aws_cloudwatch_event_target" "ecs_scheduled_task" {
@@ -151,18 +152,7 @@ resource "aws_cloudwatch_event_target" "ecs_scheduled_task" {
   }
 }
 
-## ECR/ECS ##
-
-# ECR repo
-
-resource "aws_ecr_repository" "app" {
-  name                 = var.app_name
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-}
+## ECS ##
 
 # ECS cluster 
 
@@ -212,8 +202,8 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
       app_name            = var.app_name,
       task_name           = var.task_name,
       environment         = var.environment,
-      repo_url            = aws_ecr_repository.app.repository_url
-      image               = var.image
+      repo_url            = var.repo_url
+      image_tag           = var.image_tag
       s3_bucket           = var.s3_bucket,
       s3_key              = var.s3_key,
       file_name           = var.file_name
@@ -245,5 +235,23 @@ resource "aws_ssm_parameter" "sheet_password" {
 
   lifecycle {
     ignore_changes = [value]
+  }
+}
+
+# S3 bucket
+resource "aws_s3_bucket" "spreadsheet" {
+  bucket = var.s3_bucket
+  acl    = "private"
+
+  versioning {
+    enabled = true
+  }
+
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm = "AES256"
+      }
+    }
   }
 }

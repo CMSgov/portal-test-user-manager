@@ -13,40 +13,50 @@ import (
 )
 
 func main() {
-	log.Printf("Starting...")
+	region := "us-east-1"
 
 	bucket := os.Getenv("S3_BUCKET")
-	log.Printf("S3 bucket: %q", bucket)
-
 	key := os.Getenv("S3_KEY")
-	log.Printf("S3 key: %q", key)
 
-	log.Printf("Sheet password: %q", os.Getenv("SHEETPASSWORD"))
-
-	file, err := os.Create(key)
-	if err != nil {
-		log.Fatalf("Unable to open file %q, %v", key, err)
-	}
-	defer file.Close()
+	log.Printf("Starting application...")
 
 	sess, _ := session.NewSession(&aws.Config{
-		Region: aws.String("us-east-1")},
+		Region: aws.String(region)},
 	)
+
+	// download object from S3
 	downloader := s3manager.NewDownloader(sess)
-	numBytes, err := downloader.Download(file,
+	file, err := os.Create(key)
+	if err != nil {
+		log.Fatalf("Error opening file %q: %s", key, err)
+	}
+	defer file.Close()
+	_, err = downloader.Download(file,
 		&s3.GetObjectInput{
 			Bucket: aws.String(bucket),
 			Key:    aws.String(key),
 		})
 	if err != nil {
-		log.Fatalf("Unable to download item %q, %v", key, err)
+		log.Fatalf("Error downloading %q: %s", key, err)
 	}
-	fmt.Println("Downloaded", file.Name(), numBytes, "bytes")
+	fmt.Printf("Successfully downloaded %q from %q", key, bucket)
 
+	// print object contents to verify
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(file)
-	contents := buf.String()
-	fmt.Printf("File contents: %s\n", contents)
+	fmt.Printf("File contents: %s", buf.String())
+
+	// upload to s3
+	uploader := s3manager.NewUploader(sess)
+	_, err = uploader.Upload(&s3manager.UploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		Body:   file,
+	})
+	if err != nil {
+		log.Fatalf("Error uploading object %q: %s", key, err)
+	}
+	fmt.Printf("Successfully uploaded %q to %q", key, bucket)
 
 	log.Printf("Exiting")
 }

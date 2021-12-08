@@ -13,16 +13,21 @@ variable "task_name" {
   description = "Name of the task to be run"
 }
 
-variable "image" {
+variable "image_tag" {
   type        = string
-  description = "SHA of the image to be run by the task definition"
+  description = "Tag of the image to be run by the task definition"
+  default     = "latest"
+}
+
+variable "repo_url" {
+  type        = string
+  description = "URL of the ECR repo that hosts the password rotation image"
 }
 
 variable "ecs_vpc_id" {
   type        = string
   description = "VPC ID to be used by ECS"
 }
-
 
 variable "ecs_subnet_ids" {
   type        = list(string)
@@ -35,24 +40,19 @@ variable "schedule_task_expression" {
 }
 
 variable "event_rule_enabled" {
-  type = bool
+  type        = bool
   description = "Whether the event rule that triggers the task is enabled"
 }
 
 variable "s3_bucket" {
   type        = string
-  description = "S3 bucket that contains the test user spreadsheet"
+  description = "S3 bucket that will contain the test user spreadsheet"
 }
 
 variable "s3_key" {
   type        = string
   description = "The S3 key (path/filename) for the test user spreadsheet"
   default     = ""
-}
-
-variable "s3_access_role_arn" {
-  type        = string
-  description = "The ARN of the cross-account role that grants access to the S3 bucket"
 }
 
 variable "file_name" {
