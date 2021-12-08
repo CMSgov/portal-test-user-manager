@@ -6,10 +6,10 @@ import (
 
 const (
 	user = iota
-	local
 	portal
 	previous
 	timestamp
+	numCols        = 4
 	automatedSheet = "PasswordManager"
 )
 
@@ -64,11 +64,11 @@ func syncPasswordManagerUsersToMACFINUsers(f *excelize.File, config *Portal) err
 	// add new MACFIN users to automatedSheet
 	for user, password := range macFinUsersToPasswords {
 		if _, ok := passwordManagerUsers[user]; !ok {
-			values := []string{user, password, password, password, "Rotate Now"}
+			values := [numCols]string{user, password, password, "Rotate Now"}
 			f.InsertRow(automatedSheet, numRows+1) // insert before numRows+1
 			numRows++
 			// write row
-			for j := 0; j < 5; j++ {
+			for j := 0; j < numCols; j++ {
 				err := writeCell(f, config, automatedSheet, j+sheetOffset, numRows, values[j])
 				if err != nil {
 					config.errorLog.Printf("failed adding new macFin user %s to automated sheet", user)
