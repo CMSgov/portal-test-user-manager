@@ -91,7 +91,7 @@ func sendRequest(client *http.Client, method, urlstr string, customHeaders map[s
 }
 
 func loginStep(client *http.Client, config *Portal, username, password string) error {
-	// GET login page at https://portal.cms.gov/portal/
+	// GET login page at scheme+hostname+/portal/
 	hostname := config.Hostname
 	idmHostname := config.IdmHostname
 
@@ -124,7 +124,7 @@ func loginStep(client *http.Client, config *Portal, username, password string) e
 		return err
 	}
 
-	// POST  https://portal.cms.gov/portal/login to get sessionToken used for oauth2 token
+	// POST  scheme+hostname+/portal/login to get sessionToken used for oauth2 token
 	creds := loginDetails{
 		Username: username,
 		Password: password,
@@ -156,7 +156,7 @@ func loginStep(client *http.Client, config *Portal, username, password string) e
 	}
 
 	// Start the oauth2 process
-	// GET https://idm.cms.gov/login/sessionCookieRedirect?token=&redirectUrl=https://portal.cms.gov/myportal/
+	// GET scheme+idmHostname+/login/sessionCookieRedirect?token=&redirectUrl=scheme+hostname+/myportal/
 	// get the sessionToken from the response body of the POST /portal/login request and use as oauth2 token
 	token := userData.SessionToken
 	params := fmt.Sprintf("token=%s&redirectUrl=%s%s%s", token, scheme, hostname, oauth2RedirectUrlPath)
@@ -205,7 +205,7 @@ func changePasswordStep(client *http.Client, config *Portal, oldPassword, newPas
 		return errors.New("missing userId in response body")
 	}
 
-	// Change password: https://portal.cms.gov/myportal/viewprofile/myprofile/credential
+	// Change password: scheme+hostname+/myportal/viewprofile/myprofile/credential
 	creds := changePassword{
 		OldPassword: oldPassword,
 		NewPassword: newPassword,
@@ -255,17 +255,22 @@ func changeUserPassword(client *http.Client, config *Portal, username, oldPasswo
 	return nil
 }
 
-func logoutStep(client *http.Client, config *Portal) error {
+func logoutStep(client *http.Client, config *Portal) (err error) {
 	hostname := config.Hostname
-	_, err := sendRequest(client, http.MethodGet, scheme+hostname+logoutPath, nil, nil)
-	// Delete all cookies.
-	defer func(err error) error {
-		client.Jar, _ = cookiejar.New(nil)
-		return err
-	}(err)
-
+	_, err = sendRequest(client, http.MethodGet, scheme+hostname+logoutPath, nil, nil)
 	if err != nil {
 		return err
 	}
+
+	// Delete all cookies.
+	defer func() error {
+		newJar, cerr := cookiejar.New(nil)
+		if cerr != nil {
+			return fmt.Errorf("failed to delete cookies; logout failed: %v", cerr)
+		}
+		client.Jar = newJar
+		return err
+	}()
+
 	return nil
 }

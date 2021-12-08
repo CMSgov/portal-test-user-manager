@@ -48,6 +48,7 @@ func syncPasswordManagerUsersToMACFINUsers(f *excelize.File, config *Portal) err
 
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
+		config.errorLog.Print("failed reading rows to synchronize users")
 		return err
 	}
 
@@ -68,7 +69,11 @@ func syncPasswordManagerUsersToMACFINUsers(f *excelize.File, config *Portal) err
 			numRows++
 			// write row
 			for j := 0; j < 5; j++ {
-				writeCell(f, automatedSheet, j+sheetOffset, numRows, values[j])
+				err := writeCell(f, config, automatedSheet, j+sheetOffset, numRows, values[j])
+				if err != nil {
+					config.errorLog.Printf("failed adding new macFin user %s to automated sheet", user)
+					return err
+				}
 			}
 			continue
 		}
@@ -79,12 +84,35 @@ func syncPasswordManagerUsersToMACFINUsers(f *excelize.File, config *Portal) err
 	for pwUser := range passwordManagerUsers {
 		if _, ok := macFinUsersToPasswords[pwUser]; !ok {
 			// pwUser is not in MCFIN users; remove pwUser from PasswordManager
-			f.RemoveRow(automatedSheet, rowIndx+rowOffset)
+			err := f.RemoveRow(automatedSheet, rowIndx+rowOffset)
+			if err != nil {
+				config.errorLog.Printf("failed removing user %s from automated sheet: ", pwUser)
+				return err
+			}
 			continue
 		}
 		rowIndx++
 	}
 
+	err = f.SaveAs(config.Filename)
+	if err != nil {
+		config.errorLog.Print("failed saving file after synchronizing automated sheet users to macFin users")
+		return err
+	}
+
+	return nil
+}
+
+// check all errors; save file after every cell update
+func writeCell(f *excelize.File, config *Portal, sheet string, xCoord, yCoord int, value string) error {
+	cellName, err := excelize.CoordinatesToCellName(xCoord, yCoord)
+	if err != nil {
+		return err
+	}
+	err = f.SetCellValue(sheet, cellName, value)
+	if err != nil {
+		return err
+	}
 	err = f.SaveAs(config.Filename)
 	if err != nil {
 		return err
@@ -93,16 +121,30 @@ func syncPasswordManagerUsersToMACFINUsers(f *excelize.File, config *Portal) err
 	return nil
 }
 
-func writeCell(f *excelize.File, sheet string, xCoord, yCoord int, value string) {
-	cellName, _ := excelize.CoordinatesToCellName(xCoord, yCoord)
-	f.SetCellValue(sheet, cellName, value)
-}
+// Copy cell in automatedSheet
+func copyCell(f *excelize.File, config *Portal, srcX, srcY, destX, destY int) error {
+	srcCell, err := excelize.CoordinatesToCellName(srcX, srcY)
+	if err != nil {
+		return err
+	}
+	destCell, err := excelize.CoordinatesToCellName(destX, destY)
+	if err != nil {
+		return err
+	}
+	srcValue, err := f.GetCellValue(automatedSheet, srcCell)
+	if err != nil {
+		return err
+	}
+	err = f.SetCellValue(automatedSheet, destCell, srcValue)
+	if err != nil {
+		return err
+	}
+	err = f.SaveAs(config.Filename)
+	if err != nil {
+		return err
+	}
 
-func copyCell(f *excelize.File, automatedSheet string, srcX, srcY, destX, destY int) {
-	srcCell, _ := excelize.CoordinatesToCellName(srcX, srcY)
-	destCell, _ := excelize.CoordinatesToCellName(destX, destY)
-	srcValue, _ := f.GetCellValue(automatedSheet, srcCell)
-	f.SetCellValue(automatedSheet, destCell, srcValue)
+	return nil
 }
 
 func validateFileSize(f *excelize.File, config *Input) (errors []string) {

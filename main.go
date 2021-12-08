@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/cookiejar"
@@ -8,6 +9,10 @@ import (
 	"time"
 
 	"github.com/xuri/excelize/v2"
+)
+
+const (
+	thirtyDays int = 30
 )
 
 type Input struct {
@@ -44,7 +49,16 @@ func init() {
 	}
 }
 
-func resetPasswords(f *excelize.File, config *Portal) error {
+func resetPasswords(f *excelize.File, config *Portal) (err error) {
+	defer func() error {
+		if rerr := recover(); rerr != nil && fmt.Sprint(rerr) == ErrCryptoSourceFailure.Error() {
+			return ErrCryptoSourceFailure
+		} else if rerr != nil {
+			panic(rerr)
+		}
+		return err
+	}()
+
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
 		return err
@@ -61,48 +75,61 @@ func resetPasswords(f *excelize.File, config *Portal) error {
 
 	var lastRotated time.Time
 
+	randomPasswords := make([]string, 0, len(rows)-rowOffset)
+	for i := 0; i < len(rows)-rowOffset; i++ {
+		password := getRandomPassword()
+		randomPasswords = append(randomPasswords, password)
+	}
+
 	for i, row := range rows[rowOffset:] {
-		if row[timestamp] == "Rotate Now" {
-			// force rotation
-			ts, _ := time.Parse(time.UnixDate, row[timestamp])
-			lastRotated = ts.AddDate(0, 0, -32)
-		} else {
-			lastRotated, _ = time.Parse(time.UnixDate, row[timestamp])
-		}
-
 		now = time.Now().UTC()
-
 		name := row[user]
 
-		if now.Before(lastRotated.AddDate(0, 0, 30)) {
+		if row[timestamp] == "Rotate Now" {
+			// force rotation
+			lastRotated = now.AddDate(0, 0, -thirtyDays-2)
+		} else {
+			lastRotated, err = time.Parse(time.UnixDate, row[timestamp])
+			if err != nil {
+				config.errorLog.Printf("error parsing timestamp from row %d for user %s: %v", i+rowOffset, name, err)
+				return err
+			}
+		}
+
+		if now.Before(lastRotated.AddDate(0, 0, thirtyDays)) {
 			config.infoLog.Printf("%s: no rotation needed", row[user])
 			numNoRotation++
 			continue
 		} else {
-			newPassword := getRandomPassword(passwordLength)
-
-			// write new password to local
-			writeCell(f, automatedSheet, local+sheetOffset, i+rowOffset+sheetOffset, newPassword)
-			// reset password in the portal
+			newPassword := randomPasswords[i]
 			err = changeUserPassword(client, config, name, row[portal], newPassword)
 			if err != nil {
 				numFail++
 				config.errorLog.Printf("user %s password reset FAIL: %v", name, err)
-				// write old password to local
-				writeCell(f, automatedSheet, local+sheetOffset, i+rowOffset+sheetOffset, row[portal])
 				continue
 			}
 			numSuccess++
-			// copy portal password to previous
-			copyCell(f, automatedSheet, portal+sheetOffset, i+rowOffset+sheetOffset, previous+sheetOffset, i+rowOffset+sheetOffset)
-			// copy local password to portal
-			copyCell(f, automatedSheet, local+sheetOffset, i+rowOffset+sheetOffset, portal+sheetOffset, i+rowOffset+sheetOffset)
-			// set timestamp
-			writeCell(f, automatedSheet, timestamp+sheetOffset, i+rowOffset+sheetOffset, time.Now().UTC().Format(time.UnixDate))
-			// save file
-			err = f.SaveAs(config.Filename)
+			// copy portal col password to previous col
+			err = copyCell(f, config, portal+sheetOffset, i+rowOffset+sheetOffset, previous+sheetOffset, i+rowOffset+sheetOffset)
 			if err != nil {
-				config.errorLog.Printf("failed to same to file for user %s", name)
+				config.errorLog.Printf("failed to write previous password %s to sheet %s, row %d for user %s: %v",
+					row[portal], config.SheetName, i+rowOffset, name, err)
+				return err
+			}
+
+			// Write new password to portal col
+			err = writeCell(f, config, automatedSheet, portal+sheetOffset, i+rowOffset+sheetOffset, newPassword)
+			if err != nil {
+				config.errorLog.Printf("failed to write new password to sheet %s in row %d for user %s: %v; manually set password for user",
+					config.SheetName, i+rowOffset+sheetOffset, name, err)
+				return nil
+			}
+			// set timestamp
+			ts := time.Now().UTC().Format(time.UnixDate)
+			err = writeCell(f, config, automatedSheet, timestamp+sheetOffset, i+rowOffset+sheetOffset, ts)
+			if err != nil {
+				config.errorLog.Printf("failed to write timestamp %s to sheet %s in row %d for user %s: %v",
+					ts, config.SheetName, i+rowOffset+sheetOffset, name, err)
 				return err
 			}
 			config.infoLog.Printf("%s: rotation complete", row[user])
@@ -166,13 +193,6 @@ func main() {
 	}
 
 	err = syncPasswordManagerUsersToMACFINUsers(f, portal)
-	if err != nil {
-		errorLog.Fatal(err)
-	}
-
-	err = f.ProtectSheet(automatedSheet, &excelize.FormatSheetProtection{
-		Password: input.SheetPassword,
-	})
 	if err != nil {
 		errorLog.Fatal(err)
 	}
