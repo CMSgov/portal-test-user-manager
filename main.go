@@ -12,7 +12,9 @@ import (
 )
 
 const (
-	thirtyDays int = 30
+	thirtyDays  int = 30
+	rowOffset   int = 1
+	sheetOffset int = 1
 )
 
 type Input struct {
@@ -66,19 +68,16 @@ func resetPasswords(f *excelize.File, config *Portal) (err error) {
 
 	var now time.Time
 
-	rowOffset := 1   // row 0 is the header row
-	sheetOffset := 1 // sheet starts counting from 1
-
 	numSuccess := 0
 	numFail := 0
 	numNoRotation := 0
 
 	var lastRotated time.Time
 
-	randomPasswords := make([]string, 0, len(rows)-rowOffset)
+	randomPasswords := make([]string, len(rows)-rowOffset)
 	for i := 0; i < len(rows)-rowOffset; i++ {
 		password := getRandomPassword()
-		randomPasswords = append(randomPasswords, password)
+		randomPasswords[i] = password
 	}
 
 	for i, row := range rows[rowOffset:] {
@@ -182,7 +181,7 @@ func main() {
 		SelectUnlockedCells: true,
 	})
 	if err != nil {
-		portal.errorLog.Fatalf("failed to protect %s sheet", automatedSheet)
+		errorLog.Fatalf("failed to protect %s sheet", automatedSheet)
 	}
 
 	errors := validateFileSize(f, input)

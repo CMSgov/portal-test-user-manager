@@ -46,8 +46,7 @@ func getRandomPassword() string {
 		buf[i] = all[rnd.Intn(len(all))]
 	}
 
-	// use crand for shuffle
-	rand.Shuffle(len(buf), func(i, j int) {
+	rnd.Shuffle(len(buf), func(i, j int) {
 		buf[i], buf[j] = buf[j], buf[i]
 	})
 

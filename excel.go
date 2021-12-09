@@ -9,10 +9,8 @@ const (
 	portal
 	previous
 	timestamp
-	numCols        = 4
-	automatedSheet = "PasswordManager"
-	rowOffset      = 1
-	sheetOffset    = 1
+	numCols        int    = 4
+	automatedSheet string = "PasswordManager"
 )
 
 func getMCFinUsers(f *excelize.File, config *Portal) (map[string]string, error) {
