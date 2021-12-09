@@ -109,7 +109,7 @@ func resetPasswords(f *excelize.File, config *Portal) (err error) {
 			}
 			numSuccess++
 			// copy portal col password to previous col
-			err = copyCell(f, config, portal+sheetOffset, i+rowOffset+sheetOffset, previous+sheetOffset, i+rowOffset+sheetOffset)
+			err = copyCell(f, config.Filename, portal+sheetOffset, i+rowOffset+sheetOffset, previous+sheetOffset, i+rowOffset+sheetOffset)
 			if err != nil {
 				config.errorLog.Printf("failed to write previous password %s to sheet %s, row %d for user %s: %v",
 					row[portal], config.SheetName, i+rowOffset, name, err)
@@ -117,7 +117,7 @@ func resetPasswords(f *excelize.File, config *Portal) (err error) {
 			}
 
 			// Write new password to portal col
-			err = writeCell(f, config, automatedSheet, portal+sheetOffset, i+rowOffset+sheetOffset, newPassword)
+			err = writeCell(f, config.Filename, automatedSheet, portal+sheetOffset, i+rowOffset+sheetOffset, newPassword)
 			if err != nil {
 				config.errorLog.Printf("failed to write new password to sheet %s in row %d for user %s: %v; manually set password for user",
 					config.SheetName, i+rowOffset+sheetOffset, name, err)
@@ -125,7 +125,7 @@ func resetPasswords(f *excelize.File, config *Portal) (err error) {
 			}
 			// set timestamp
 			ts := time.Now().UTC().Format(time.UnixDate)
-			err = writeCell(f, config, automatedSheet, timestamp+sheetOffset, i+rowOffset+sheetOffset, ts)
+			err = writeCell(f, config.Filename, automatedSheet, timestamp+sheetOffset, i+rowOffset+sheetOffset, ts)
 			if err != nil {
 				config.errorLog.Printf("failed to write timestamp %s to sheet %s in row %d for user %s: %v",
 					ts, config.SheetName, i+rowOffset+sheetOffset, name, err)
