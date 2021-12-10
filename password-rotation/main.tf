@@ -1,18 +1,20 @@
 locals {
   awslogs_group = "/aws/ecs/${var.app_name}-${var.environment}-${var.task_name}"
+  split_key = split("/", var.s3_key)
+  file_name = element(split_key, length(split_key) - 1)
 }
 
+data "aws_partition" "current" {}
+
 data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
 
 # Create a data source to pull the latest active revision from
 data "aws_ecs_task_definition" "scheduled_task_def" {
   task_definition = aws_ecs_task_definition.scheduled_task_def.family
   depends_on      = [aws_ecs_task_definition.scheduled_task_def] # ensures at least one task def exists
 }
-
-data "aws_partition" "current" {}
-
-data "aws_region" "current" {}
 
 ## IAM ## 
 
@@ -206,7 +208,7 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
       image_tag           = var.image_tag
       s3_bucket           = var.s3_bucket,
       s3_key              = var.s3_key,
-      file_name           = var.file_name
+      file_name           = locals.file_name
       sheet_name          = var.sheet_name
       username_header     = var.username_header
       password_header     = var.password_header
