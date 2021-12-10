@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"strings"
 )
 
 const (
@@ -36,25 +35,24 @@ type changePassword struct {
 	NewPassword string `json:"newPassword"`
 }
 
-type UserData struct {
+type userData struct {
 	UserId       string `json:"userId"`
 	SessionToken string `json:"sessionToken"`
 }
 
-func sendRequest(client *http.Client, method, urlstr string, customHeaders map[string][]string, body []byte) (*UserData, error) {
+func sendRequest(client *http.Client, method, urlstr string, customHeaders map[string][]string, body []byte, userData interface{}) error {
 	var req *http.Request
 	var err error
-	userData := &UserData{}
 	if method == http.MethodGet {
 		req, err = http.NewRequest(http.MethodGet, urlstr, nil)
 	} else if method == http.MethodPost {
 		req, err = http.NewRequest(http.MethodPost, urlstr, bytes.NewReader(body))
 	} else {
-		return nil, errors.New("unsupported method type")
+		return errors.New("unsupported method type")
 	}
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if len(body) > 0 {
@@ -69,25 +67,24 @@ func sendRequest(client *http.Client, method, urlstr string, customHeaders map[s
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, errors.New(string(b))
+		return fmt.Errorf("got HTTP status code %d with body: \n%s", resp.StatusCode, string(b))
 	}
 
-	if method == http.MethodPost && (strings.HasSuffix(urlstr, loginSubmitPath) ||
-		strings.HasSuffix(urlstr, userDataPath)) {
-		err = json.NewDecoder(resp.Body).Decode(userData)
+	if userData != nil {
+		err = json.NewDecoder(resp.Body).Decode(&userData)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return userData, nil
+	return nil
 }
 
 func loginStep(client *http.Client, config *Portal, username, password string) error {
@@ -104,7 +101,7 @@ func loginStep(client *http.Client, config *Portal, username, password string) e
 		"sec-fetch-dest":            {"document"},
 	}
 
-	_, err := sendRequest(client, http.MethodGet, scheme+hostname+loginPagePath, headers, nil)
+	err := sendRequest(client, http.MethodGet, scheme+hostname+loginPagePath, headers, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -119,7 +116,7 @@ func loginStep(client *http.Client, config *Portal, username, password string) e
 		"referer":        {scheme + hostname},
 	}
 
-	_, err = sendRequest(client, http.MethodGet, scheme+hostname+loginClearPath, headers, nil)
+	err = sendRequest(client, http.MethodGet, scheme+hostname+loginClearPath, headers, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -146,7 +143,8 @@ func loginStep(client *http.Client, config *Portal, username, password string) e
 		"origin":         {hostname},
 	}
 
-	userData, err := sendRequest(client, http.MethodPost, scheme+hostname+loginSubmitPath, headers, body)
+	userData := &userData{}
+	err = sendRequest(client, http.MethodPost, scheme+hostname+loginSubmitPath, headers, body, userData)
 	if err != nil {
 		return err
 	}
@@ -171,7 +169,7 @@ func loginStep(client *http.Client, config *Portal, username, password string) e
 		"referer":                   {scheme + hostname},
 		"origin":                    {hostname},
 	}
-	_, err = sendRequest(client, http.MethodGet, scheme+idmHostname+loginOauth2Path+params, headers, nil)
+	err = sendRequest(client, http.MethodGet, scheme+idmHostname+loginOauth2Path+params, headers, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -196,7 +194,8 @@ func changePasswordStep(client *http.Client, config *Portal, oldPassword, newPas
 		"origin":                     {scheme + hostname},
 	}
 
-	userData, err := sendRequest(client, http.MethodPost, scheme+idmHostname+userDataPath, headers, nil)
+	userData := &userData{}
+	err := sendRequest(client, http.MethodPost, scheme+idmHostname+userDataPath, headers, nil, userData)
 	if err != nil {
 		return err
 	}
@@ -230,7 +229,7 @@ func changePasswordStep(client *http.Client, config *Portal, oldPassword, newPas
 		"userid":            {userData.UserId},
 	}
 
-	_, err = sendRequest(client, http.MethodPost, scheme+hostname+changePasswordPath, headers, body)
+	err = sendRequest(client, http.MethodPost, scheme+hostname+changePasswordPath, headers, body, nil)
 	if err != nil {
 		return err
 	}
@@ -257,7 +256,7 @@ func changeUserPassword(client *http.Client, config *Portal, username, oldPasswo
 
 func logoutStep(client *http.Client, config *Portal) (err error) {
 	hostname := config.Hostname
-	_, err = sendRequest(client, http.MethodGet, scheme+hostname+logoutPath, nil, nil)
+	err = sendRequest(client, http.MethodGet, scheme+hostname+logoutPath, nil, nil, nil)
 	if err != nil {
 		return err
 	}

@@ -20,22 +20,28 @@ const (
 type cryptoSource struct{}
 
 var ErrCryptoSourceFailure = fmt.Errorf("error generating crpyto random source")
+var src cryptoSource
+var rnd = rand.New(src)
 
 func (s cryptoSource) Seed(seed int64) {}
 
-// Returns signed int64
 func (s cryptoSource) Int63() int64 {
-	max := ^uint(1 << 63)
-	bigInt, err := crand.Int(crand.Reader, big.NewInt(int64(max)))
+	bigInt, err := crand.Int(crand.Reader, new(big.Int).SetUint64(1<<63))
 	if err != nil {
 		panic(ErrCryptoSourceFailure)
 	}
 	return bigInt.Int64()
 }
 
-func getRandomPassword() string {
-	var src cryptoSource
-	rnd := rand.New(src)
+func getRandomPassword() (passwd string, err error) {
+	defer func() (string, error) {
+		if rerr := recover(); rerr != nil && fmt.Sprint(rerr) == ErrCryptoSourceFailure.Error() {
+			return "", ErrCryptoSourceFailure
+		} else if rerr != nil {
+			panic(rerr)
+		}
+		return passwd, nil
+	}()
 
 	buf := make([]byte, passwordLength)
 	buf[0] = digits[rnd.Intn(len(digits))]
@@ -50,5 +56,6 @@ func getRandomPassword() string {
 		buf[i], buf[j] = buf[j], buf[i]
 	})
 
-	return string(buf)
+	passwd = string(buf)
+	return passwd, nil
 }

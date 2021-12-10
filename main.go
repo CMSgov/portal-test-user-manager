@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"net/http/cookiejar"
@@ -52,15 +51,6 @@ func init() {
 }
 
 func resetPasswords(f *excelize.File, config *Portal) (err error) {
-	defer func() error {
-		if rerr := recover(); rerr != nil && fmt.Sprint(rerr) == ErrCryptoSourceFailure.Error() {
-			return ErrCryptoSourceFailure
-		} else if rerr != nil {
-			panic(rerr)
-		}
-		return err
-	}()
-
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
 		return err
@@ -76,7 +66,11 @@ func resetPasswords(f *excelize.File, config *Portal) (err error) {
 
 	randomPasswords := make([]string, len(rows)-rowOffset)
 	for i := 0; i < len(rows)-rowOffset; i++ {
-		password := getRandomPassword()
+		password, err := getRandomPassword()
+		if err != nil {
+			config.errorLog.Print(err)
+			return err
+		}
 		randomPasswords[i] = password
 	}
 
@@ -121,10 +115,10 @@ func resetPasswords(f *excelize.File, config *Portal) (err error) {
 			if err != nil {
 				config.errorLog.Printf("failed to write new password to sheet %s in row %d for user %s: %v; manually set password for user",
 					config.SheetName, i+rowOffset+sheetOffset, name, err)
-				return nil
+				return err
 			}
 			// set timestamp
-			ts := time.Now().UTC().Format(time.UnixDate)
+			ts := now.Format(time.UnixDate)
 			err = writeCell(f, config.Filename, automatedSheet, timestamp+sheetOffset, i+rowOffset+sheetOffset, ts)
 			if err != nil {
 				config.errorLog.Printf("failed to write timestamp %s to sheet %s in row %d for user %s: %v",
