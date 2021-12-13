@@ -17,8 +17,9 @@ func main() {
 
 	bucket := os.Getenv("S3_BUCKET")
 	key := os.Getenv("S3_KEY")
+	password := os.Getenv("SHEETPASSWORD")
 
-	log.Printf("Starting application...")
+	log.Printf("Parameter store access: sheet password is %q", password)
 
 	sess, _ := session.NewSession(&aws.Config{
 		Region: aws.String(region)},

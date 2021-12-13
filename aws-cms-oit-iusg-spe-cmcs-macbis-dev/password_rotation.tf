@@ -10,7 +10,7 @@ module "password_rotation" {
   ecs_vpc_id               = "vpc-043ae3133b10db9a0"
   ecs_subnet_ids           = ["subnet-03f688f7435a936d7", "subnet-0fb2cb5b2036a5c6a"] // private subnets
   schedule_task_expression = "cron(0/1 * * * ? *)"                                    // every 1 minute
-  event_rule_enabled       = false
+  event_rule_enabled       = true
 
   // TODO add real values 
   s3_bucket          = "bharvey-test-same-account-bucket"

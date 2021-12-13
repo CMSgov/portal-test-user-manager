@@ -1,7 +1,7 @@
 locals {
   awslogs_group = "/aws/ecs/${var.app_name}-${var.environment}-${var.task_name}"
   split_key = split("/", var.s3_key)
-  file_name = element(split_key, length(split_key) - 1)
+  file_name = element(local.split_key, length(local.split_key) - 1)
 }
 
 data "aws_partition" "current" {}
@@ -37,6 +37,8 @@ resource "aws_iam_role" "cloudwatch_target_role" {
   name               = "cw-target-role-${var.app_name}-${var.environment}-${var.task_name}"
   description        = "Role allowing CloudWatch Events to run the task"
   assume_role_policy = data.aws_iam_policy_document.events_assume_role_policy.json
+  # enables changing policy attachments without first manually detaching in the AWS console
+  force_detach_policies = true
 }
 
 resource "aws_iam_role_policy_attachment" "container_service_events" {
@@ -92,6 +94,8 @@ resource "aws_iam_role" "task_execution_role" {
   name               = "ecs-task-exec-role-${var.app_name}-${var.environment}-${var.task_name}"
   description        = "Role granting permissions to the ECS container agent/Docker daemon"
   assume_role_policy = data.aws_iam_policy_document.ecs_assume_role_policy.json
+  # enables changing policy attachments without first manually detaching in the AWS console
+  force_detach_policies = true
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
@@ -99,25 +103,39 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+data "aws_iam_policy_document" "parameter_store" {
+  statement {
+    actions   = ["ssm:GetParameters"]
+    resources = ["${aws_ssm_parameter.sheet_password.arn}", ]
+    effect    = "Allow"
+  }
+}
+
 resource "aws_iam_policy" "parameter_store" {
   name   = "${var.app_name}-${var.environment}-${var.task_name}-parameter-store"
-  policy = <<POLICY
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ssm:GetParameters"
-      ],
-      "Resource": [
-        "${aws_ssm_parameter.sheet_password.arn}"
-      ]
-    }
-  ]
+  description = "Policy granting access to parameter store"
+  policy      = data.aws_iam_policy_document.parameter_store.json
 }
-POLICY
-}
+
+# resource "aws_iam_policy" "parameter_store" {
+#   name   = "${var.app_name}-${var.environment}-${var.task_name}-parameter-store"
+#   policy = <<POLICY
+# {
+#   "Version": "2012-10-17",
+#   "Statement": [
+#     {
+#       "Effect": "Allow",
+#       "Action": [
+#         "ssm:GetParameters"
+#       ],
+#       "Resource": [
+#         "${aws_ssm_parameter.sheet_password.arn}"
+#       ]
+#     }
+#   ]
+# }
+# POLICY
+# }
 
 resource "aws_iam_policy_attachment" "parameter_store" {
   name       = "${var.app_name}-${var.environment}-${var.task_name}-parameter-store"
@@ -208,7 +226,7 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
       image_tag           = var.image_tag
       s3_bucket           = var.s3_bucket,
       s3_key              = var.s3_key,
-      file_name           = locals.file_name
+      file_name           = local.file_name
       sheet_name          = var.sheet_name
       username_header     = var.username_header
       password_header     = var.password_header
