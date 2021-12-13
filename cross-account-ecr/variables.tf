@@ -1,14 +1,9 @@
 variable "account_id" {
   type        = string
-  description = "Account ID where the application using the image is running"
+  description = "Account ID that will be pulling the image"
 }
 
-variable "app_name" {
+variable "repo_name" {
   type        = string
-  description = "Application name for the image"
+  description = "Name of the ECR repo"
 }
-
-# variable "environment" {
-#   type        = string
-#   description = "Environment name"
-# }
