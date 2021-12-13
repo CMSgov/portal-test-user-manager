@@ -37,13 +37,7 @@ resource "aws_iam_role" "cloudwatch_target_role" {
   name               = "cw-target-role-${var.app_name}-${var.environment}-${var.task_name}"
   description        = "Role allowing CloudWatch Events to run the task"
   assume_role_policy = data.aws_iam_policy_document.events_assume_role_policy.json
-  # enables changing policy attachments without first manually detaching in the AWS console
-  force_detach_policies = true
-}
-
-resource "aws_iam_role_policy_attachment" "container_service_events" {
-  role       = aws_iam_role.cloudwatch_target_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceEventsRole"
+  managed_policy_arns = ["arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceEventsRole"]
 }
 
 ## ECS roles
@@ -70,8 +64,6 @@ resource "aws_iam_role" "task_role" {
   description         = "Role granting permissions to the ECS container task"
   assume_role_policy  = data.aws_iam_policy_document.ecs_assume_role_policy.json
   managed_policy_arns = [aws_iam_policy.s3_access.arn]
-  # enables changing policy attachments without first manually detaching in the AWS console
-  force_detach_policies = true
 }
 
 data "aws_iam_policy_document" "s3_access" {
@@ -94,13 +86,7 @@ resource "aws_iam_role" "task_execution_role" {
   name               = "ecs-task-exec-role-${var.app_name}-${var.environment}-${var.task_name}"
   description        = "Role granting permissions to the ECS container agent/Docker daemon"
   assume_role_policy = data.aws_iam_policy_document.ecs_assume_role_policy.json
-  # enables changing policy attachments without first manually detaching in the AWS console
-  force_detach_policies = true
-}
-
-resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
-  role       = aws_iam_role.task_execution_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+  managed_policy_arns = [aws_iam_policy.parameter_store.arn, "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"]
 }
 
 data "aws_iam_policy_document" "parameter_store" {
@@ -115,32 +101,6 @@ resource "aws_iam_policy" "parameter_store" {
   name   = "${var.app_name}-${var.environment}-${var.task_name}-parameter-store"
   description = "Policy granting access to parameter store"
   policy      = data.aws_iam_policy_document.parameter_store.json
-}
-
-# resource "aws_iam_policy" "parameter_store" {
-#   name   = "${var.app_name}-${var.environment}-${var.task_name}-parameter-store"
-#   policy = <<POLICY
-# {
-#   "Version": "2012-10-17",
-#   "Statement": [
-#     {
-#       "Effect": "Allow",
-#       "Action": [
-#         "ssm:GetParameters"
-#       ],
-#       "Resource": [
-#         "${aws_ssm_parameter.sheet_password.arn}"
-#       ]
-#     }
-#   ]
-# }
-# POLICY
-# }
-
-resource "aws_iam_policy_attachment" "parameter_store" {
-  name       = "${var.app_name}-${var.environment}-${var.task_name}-parameter-store"
-  roles      = [aws_iam_role.task_execution_role.name]
-  policy_arn = aws_iam_policy.parameter_store.arn
 }
 
 ## CloudWatch ##
