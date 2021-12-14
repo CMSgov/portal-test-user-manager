@@ -59,6 +59,7 @@ func getPasswordManagerUsers(f *excelize.File, input *Input) (map[string]string,
 	return passwordManagerUsersToPassword, nil
 }
 
+// Sync PasswordManager usernames with MACFin users
 func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error {
 	macFinUsersToPasswords, err := getMACFinUsers(f, input)
 	if err != nil {
@@ -72,7 +73,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 
 	numRows := len(passwordManagerUsersToPassword)
 
-	// add new MACFIN users to automatedSheet
+	// add new MACFin users to automatedSheet
 	for user, password := range macFinUsersToPasswords {
 		if _, ok := passwordManagerUsersToPassword[user]; !ok {
 			values := [numCols]string{user, password, password, "Rotate Now"}
@@ -89,11 +90,11 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 		}
 	}
 
-	// remove deleted MACFIN users from PasswordManager sheet
+	// remove deleted MACFin users from PasswordManager sheet
 	rowIndx := 1
 	for pwUser := range passwordManagerUsersToPassword {
 		if _, ok := macFinUsersToPasswords[pwUser]; !ok {
-			// pwUser is not in MCFIN users; remove pwUser from PasswordManager
+			// pwUser is not in MACFin users; remove pwUser from PasswordManager
 			err := f.RemoveRow(automatedSheet, rowIndx+rowOffset)
 			if err != nil {
 				return fmt.Errorf("failed removing user %s from %s sheet in file %s: %s", pwUser, automatedSheet, input.Filename, err)
