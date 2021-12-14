@@ -66,21 +66,21 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 		return err
 	}
 
-	usersToPassword, usersToRow, err := getPasswordManagerUsers(f, input)
+	_, usersToRow, err := getPasswordManagerUsers(f, input)
 	if err != nil {
 		return err
 	}
 
 	rowOffset := input.rowOffset
 	sheetOffset := input.sheetOffset
-	numRows := len(usersToPassword) + rowOffset
+	numRows := len(usersToRow) + rowOffset
 	automatedSheet := input.automatedSheetName
 	numCols := len(input.automatedSheetColNameToIndex)
 	colDelete := input.automatedSheetColNameToIndex["colDelete"]
 
 	// add new MACFin users to automatedSheet
 	for macFinUser, password := range macFinUsersToPasswords {
-		if _, ok := usersToPassword[macFinUser]; !ok {
+		if _, ok := usersToRow[macFinUser]; !ok {
 			values := []string{macFinUser, password, password, "Rotate Now", ""}
 			// write new row
 			for col := 0; col < numCols; col++ {
