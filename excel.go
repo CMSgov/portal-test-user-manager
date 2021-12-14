@@ -13,8 +13,13 @@ const (
 	automatedSheet string = "PasswordManager"
 )
 
-func getMCFinUsers(f *excelize.File, config *Portal) (map[string]string, error) {
-	rows, err := f.GetRows(config.SheetName)
+func getHeaderToXCoord(headerRow []string) map[string]int {
+	headerToXCoord := make(map[string]int, len(headerRow))
+	for i, cell := range headerRow {
+		headerToXCoord[cell] = i
+	}
+	return headerToXCoord
+}
 	if err != nil {
 		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", input.SheetName, input.Filename, err)
 	}

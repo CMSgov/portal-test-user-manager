@@ -40,6 +40,20 @@ type userData struct {
 	SessionToken string `json:"sessionToken"`
 }
 
+func getCookie(c *http.Client, urlstr, cookieName string) *http.Cookie {
+	urlObj, err := url.Parse(urlstr)
+	if err != nil {
+		panic(err)
+	}
+	cookies := c.Jar.Cookies(urlObj)
+	for _, c := range cookies {
+		if c.Name == cookieName {
+			return c
+		}
+	}
+	return nil
+}
+
 func sendRequest(client *http.Client, method, urlstr string, customHeaders map[string][]string, body []byte, userData interface{}) error {
 	var req *http.Request
 	var err error
