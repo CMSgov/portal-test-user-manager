@@ -108,21 +108,21 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 			}
 			numSuccess++
 			// copy portal col password to previous col
-			err = copyCell(f, automatedSheet, input.Filename, colPortal+sheetOffset, i+rowOffset+sheetOffset, colPrevious+sheetOffset, i+rowOffset+sheetOffset)
+			err = copyCell(f, automatedSheet, colPortal+sheetOffset, i+rowOffset+sheetOffset, colPrevious+sheetOffset, i+rowOffset+sheetOffset)
 			if err != nil {
 				return fmt.Errorf("failed to write previous password %s to sheet %s, row %d for user %s: %s",
 					row[colPortal], input.SheetName, i+rowOffset, name, err)
 			}
 
 			// Write new password to portal col
-			err = writeCell(f, input.Filename, automatedSheet, colPortal+sheetOffset, i+rowOffset+sheetOffset, newPassword)
+			err = writeCell(f, automatedSheet, colPortal+sheetOffset, i+rowOffset+sheetOffset, newPassword)
 			if err != nil {
 				return fmt.Errorf("failed to write new password to sheet %s in row %d for user %s: %v; manually set password for user",
 					input.SheetName, i+rowOffset+sheetOffset, name, err)
 			}
 			// set timestamp
 			ts := now.Format(time.UnixDate)
-			err = writeCell(f, input.Filename, automatedSheet, colTimestamp+sheetOffset, i+rowOffset+sheetOffset, ts)
+			err = writeCell(f, automatedSheet, colTimestamp+sheetOffset, i+rowOffset+sheetOffset, ts)
 			if err != nil {
 				return fmt.Errorf("failed to write timestamp %s to sheet %s in row %d for user %s: %s", ts,
 					input.SheetName, i+rowOffset+sheetOffset, name, err)

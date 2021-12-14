@@ -83,7 +83,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 			numRows++
 			// write row
 			for j := 0; j < numCols; j++ {
-				err := writeCell(f, input.Filename, automatedSheet, j+sheetOffset, numRows, values[j])
+				err := writeCell(f, automatedSheet, j+sheetOffset, numRows, values[j])
 				if err != nil {
 					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", user, automatedSheet, input.Filename, err)
 				}
@@ -106,7 +106,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 		rowIndx++
 	}
 
-	err = f.SaveAs(input.Filename)
+	err = f.Save()
 	if err != nil {
 		return fmt.Errorf("failed saving %s after synchronizing automated sheet users to MACFin users: %s", input.Filename, err)
 	}
@@ -114,7 +114,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	return nil
 }
 
-func writeCell(f *excelize.File, filename, sheet string, xCoord, yCoord int, value string) error {
+func writeCell(f *excelize.File, sheet string, xCoord, yCoord int, value string) error {
 	cellName, err := excelize.CoordinatesToCellName(xCoord, yCoord)
 	if err != nil {
 		return err
@@ -123,7 +123,7 @@ func writeCell(f *excelize.File, filename, sheet string, xCoord, yCoord int, val
 	if err != nil {
 		return err
 	}
-	err = f.SaveAs(filename)
+	err = f.Save()
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func writeCell(f *excelize.File, filename, sheet string, xCoord, yCoord int, val
 }
 
 // Copy cell in automatedSheet
-func copyCell(f *excelize.File, automatedSheetName, filename string, srcX, srcY, destX, destY int) error {
+func copyCell(f *excelize.File, automatedSheetName string, srcX, srcY, destX, destY int) error {
 	srcCell, err := excelize.CoordinatesToCellName(srcX, srcY)
 	if err != nil {
 		return err
@@ -149,7 +149,7 @@ func copyCell(f *excelize.File, automatedSheetName, filename string, srcX, srcY,
 	if err != nil {
 		return err
 	}
-	err = f.SaveAs(filename)
+	err = f.Save()
 	if err != nil {
 		return err
 	}
@@ -203,7 +203,7 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 		macPassword := row[passwordX]
 		if password, ok := passwordManagerUsersToPassword[user]; ok {
 			if password != macPassword {
-				err := writeCell(f, input.Filename, input.SheetName, passwordX+sheetOffset, i+rowOffset+sheetOffset, password)
+				err := writeCell(f, input.SheetName, passwordX+sheetOffset, i+rowOffset+sheetOffset, password)
 				if err != nil {
 					return fmt.Errorf("error setting new password for user %s in sheet %s on row %d: %s", user, input.SheetName, i+rowOffset+sheetOffset, err)
 				}
