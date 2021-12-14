@@ -6,16 +6,6 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-const (
-	colUser = iota
-	colPortal
-	colPrevious
-	colTimestamp
-	numCols
-)
-
-const automatedSheet string = "PasswordManager"
-
 func getHeaderToXCoord(headerRow []string) map[string]int {
 	headerToXCoord := make(map[string]int, len(headerRow))
 	for i, cell := range headerRow {
@@ -35,6 +25,7 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 	headerToXCoord := getHeaderToXCoord(rows[0])
 	usernameXCoord := headerToXCoord[input.UsernameHeader]
 	passwordXCoord := headerToXCoord[input.PasswordHeader]
+	rowOffset := input.rowOffset
 
 	for _, row := range rows[rowOffset:] {
 		// check if row is empty
@@ -48,10 +39,15 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 }
 
 func getPasswordManagerUsers(f *excelize.File, input *Input) (map[string]string, error) {
+	automatedSheet := input.automatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", automatedSheet, input.Filename, err)
 	}
+
+	rowOffset := input.rowOffset
+	colUser := input.automatedSheetColNameToIndex["colUser"]
+	colPortal := input.automatedSheetColNameToIndex["colPortal"]
 
 	passwordManagerUsersToPassword := make(map[string]string)
 	for _, row := range rows[rowOffset:] {
@@ -74,11 +70,15 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	}
 
 	numRows := len(passwordManagerUsersToPassword)
+	rowOffset := input.rowOffset
+	sheetOffset := input.sheetOffset
+	automatedSheet := input.automatedSheetName
+	numCols := len(input.automatedSheetColNameToIndex)
 
 	// add new MACFin users to automatedSheet
 	for user, password := range macFinUsersToPasswords {
 		if _, ok := passwordManagerUsersToPassword[user]; !ok {
-			values := [numCols]string{user, password, password, "Rotate Now"}
+			values := []string{user, password, password, "Rotate Now"}
 			f.InsertRow(automatedSheet, numRows+1) // insert before numRows+1
 			numRows++
 			// write row
@@ -132,7 +132,7 @@ func writeCell(f *excelize.File, filename, sheet string, xCoord, yCoord int, val
 }
 
 // Copy cell in automatedSheet
-func copyCell(f *excelize.File, filename string, srcX, srcY, destX, destY int) error {
+func copyCell(f *excelize.File, automatedSheetName, filename string, srcX, srcY, destX, destY int) error {
 	srcCell, err := excelize.CoordinatesToCellName(srcX, srcY)
 	if err != nil {
 		return err
@@ -141,11 +141,11 @@ func copyCell(f *excelize.File, filename string, srcX, srcY, destX, destY int) e
 	if err != nil {
 		return err
 	}
-	srcValue, err := f.GetCellValue(automatedSheet, srcCell)
+	srcValue, err := f.GetCellValue(automatedSheetName, srcCell)
 	if err != nil {
 		return err
 	}
-	err = f.SetCellValue(automatedSheet, destCell, srcValue)
+	err = f.SetCellValue(automatedSheetName, destCell, srcValue)
 	if err != nil {
 		return err
 	}
@@ -192,6 +192,8 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 	headerNameToXCoord := getHeaderToXCoord(rows[0])
 	userX := headerNameToXCoord[input.UsernameHeader]
 	passwordX := headerNameToXCoord[input.PasswordHeader]
+	rowOffset := input.rowOffset
+	sheetOffset := input.sheetOffset
 
 	for i, row := range rows[rowOffset:] {
 		if row == nil {
