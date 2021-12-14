@@ -28,9 +28,7 @@ type Portal struct {
 	*Input
 	Environment string
 	Hostname    string
-	IdmHostname string // identity management hostname
-	infoLog     *log.Logger
-	errorLog    *log.Logger
+	IDMHostname string // identity management hostname
 }
 
 type Creds struct {
@@ -68,7 +66,6 @@ func resetPasswords(f *excelize.File, config *Portal) (err error) {
 	for i := 0; i < len(rows)-rowOffset; i++ {
 		password, err := getRandomPassword()
 		if err != nil {
-			config.errorLog.Print(err)
 			return err
 		}
 		randomPasswords[i] = password
@@ -84,13 +81,11 @@ func resetPasswords(f *excelize.File, config *Portal) (err error) {
 		} else {
 			lastRotated, err = time.Parse(time.UnixDate, row[timestamp])
 			if err != nil {
-				config.errorLog.Printf("error parsing timestamp from row %d for user %s: %v", i+rowOffset, name, err)
-				return err
+				return fmt.Errorf("error parsing timestamp from row %d for user %s: %s", i+rowOffset, name, err)
 			}
 		}
 
-		if now.Before(lastRotated.AddDate(0, 0, thirtyDays)) {
-			config.infoLog.Printf("%s: no rotation needed", row[user])
+			log.Printf("%s: no rotation needed", row[colUser])
 			numNoRotation++
 			continue
 		} else {
@@ -98,48 +93,43 @@ func resetPasswords(f *excelize.File, config *Portal) (err error) {
 			err = changeUserPassword(client, config, name, row[portal], newPassword)
 			if err != nil {
 				numFail++
-				config.errorLog.Printf("user %s password reset FAIL: %v", name, err)
+				log.Printf("Error: user %s password reset FAIL: %s", name, err)
 				continue
 			}
 			numSuccess++
 			// copy portal col password to previous col
 			err = copyCell(f, config.Filename, portal+sheetOffset, i+rowOffset+sheetOffset, previous+sheetOffset, i+rowOffset+sheetOffset)
 			if err != nil {
-				config.errorLog.Printf("failed to write previous password %s to sheet %s, row %d for user %s: %v",
-					row[portal], config.SheetName, i+rowOffset, name, err)
-				return err
+				return fmt.Errorf("failed to write previous password %s to sheet %s, row %d for user %s: %s",
+					row[colPortal], input.SheetName, i+rowOffset, name, err)
 			}
 
 			// Write new password to portal col
 			err = writeCell(f, config.Filename, automatedSheet, portal+sheetOffset, i+rowOffset+sheetOffset, newPassword)
 			if err != nil {
-				config.errorLog.Printf("failed to write new password to sheet %s in row %d for user %s: %v; manually set password for user",
-					config.SheetName, i+rowOffset+sheetOffset, name, err)
-				return err
+				return fmt.Errorf("failed to write new password to sheet %s in row %d for user %s: %v; manually set password for user",
+					input.SheetName, i+rowOffset+sheetOffset, name, err)
 			}
 			// set timestamp
 			ts := now.Format(time.UnixDate)
 			err = writeCell(f, config.Filename, automatedSheet, timestamp+sheetOffset, i+rowOffset+sheetOffset, ts)
 			if err != nil {
-				config.errorLog.Printf("failed to write timestamp %s to sheet %s in row %d for user %s: %v",
-					ts, config.SheetName, i+rowOffset+sheetOffset, name, err)
-				return err
+				return fmt.Errorf("failed to write timestamp %s to sheet %s in row %d for user %s: %s", ts,
+					input.SheetName, i+rowOffset+sheetOffset, name, err)
 			}
 
-			config.infoLog.Printf("%s: rotation complete", row[user])
+			log.Printf("%s: rotation complete", row[colUser])
 		}
 	}
 
-	config.infoLog.Printf("total rotations: %d success: %d  fail: %d  not rotated: %d total users: %d",
+	log.Printf("total rotations: %d success: %d  fail: %d  not rotated: %d total users: %d",
 		numSuccess+numFail, numSuccess, numFail, numNoRotation, len(rows)-1)
 
 	return nil
 }
 
 func main() {
-
-	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime|log.Lshortfile)
-	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	input := &Input{
 		SheetName:      os.Getenv("SHEETNAME"),
@@ -153,19 +143,12 @@ func main() {
 		Input:       input,
 		Environment: os.Getenv("ENVIRONMENT"),
 		Hostname:    os.Getenv("PORTALHOSTNAME"),
-		IdmHostname: os.Getenv("IDMHOSTNAME"),
-		infoLog:     infoLog,
-		errorLog:    errorLog,
-	}
-
-	err := validateFilenameLength(input)
-	if err != nil {
-		errorLog.Fatal(err)
+		IDMHostname: os.Getenv("IDMHOSTNAME"),
 	}
 
 	f, err := excelize.OpenFile(input.Filename)
 	if err != nil {
-		errorLog.Fatal(err)
+		log.Fatal(err)
 	}
 
 	// true means "block action"
@@ -175,29 +158,29 @@ func main() {
 		SelectUnlockedCells: true,
 	})
 	if err != nil {
-		errorLog.Fatalf("failed to protect %s sheet", automatedSheet)
+		log.Fatalf("failed to protect %s sheet", automatedSheet)
 	}
 
 	errors := validateFileSize(f, input)
 	for _, err := range errors {
-		infoLog.Println(err)
+		log.Println(err)
 	}
 	if len(errors) > 0 {
-		errorLog.Fatal("File size not supported. Exiting program.")
+		log.Fatal("Error: File size not supported. Exiting program.")
 	}
 
 	err = syncPasswordManagerUsersToMACFINUsers(f, portal)
 	if err != nil {
-		errorLog.Fatal(err)
+		log.Fatal(err)
 	}
 
 	err = resetPasswords(f, portal)
 	if err != nil {
-		errorLog.Fatal(err)
+		log.Fatal(err)
 	}
 
 	err = updateMacFinUsers(f, portal)
 	if err != nil {
-		errorLog.Fatal(err)
+		log.Fatal(err)
 	}
 }

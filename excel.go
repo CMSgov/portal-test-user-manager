@@ -16,8 +16,7 @@ const (
 func getMCFinUsers(f *excelize.File, config *Portal) (map[string]string, error) {
 	rows, err := f.GetRows(config.SheetName)
 	if err != nil {
-		config.errorLog.Printf("failed getting rows from %s in %s", config.SheetName, config.Filename)
-		return nil, err
+		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", input.SheetName, input.Filename, err)
 	}
 
 	users := make(map[string]string)
@@ -40,8 +39,7 @@ func getMCFinUsers(f *excelize.File, config *Portal) (map[string]string, error) 
 func getPasswordManagerUsers(f *excelize.File, config *Portal) (map[string]string, error) {
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
-		config.errorLog.Printf("failed getting rows from %s in %s", automatedSheet, config.Filename)
-		return nil, err
+		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", automatedSheet, input.Filename, err)
 	}
 
 	passwordManagerUsersToPassword := make(map[string]string)
@@ -61,7 +59,6 @@ func syncPasswordManagerUsersToMACFINUsers(f *excelize.File, config *Portal) err
 
 	passwordManagerUsersToPassword, err := getPasswordManagerUsers(f, config)
 	if err != nil {
-		config.errorLog.Printf("failed reading users from %s", automatedSheet)
 		return err
 	}
 
@@ -77,9 +74,7 @@ func syncPasswordManagerUsersToMACFINUsers(f *excelize.File, config *Portal) err
 			for j := 0; j < numCols; j++ {
 				err := writeCell(f, config.Filename, automatedSheet, j+sheetOffset, numRows, values[j])
 				if err != nil {
-					config.errorLog.Printf("failed adding new macFin user %s to %s sheet in file %s",
-						user, automatedSheet, config.Filename)
-					return err
+					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", user, automatedSheet, input.Filename, err)
 				}
 			}
 			continue
@@ -93,8 +88,7 @@ func syncPasswordManagerUsersToMACFINUsers(f *excelize.File, config *Portal) err
 			// pwUser is not in MCFIN users; remove pwUser from PasswordManager
 			err := f.RemoveRow(automatedSheet, rowIndx+rowOffset)
 			if err != nil {
-				config.errorLog.Printf("failed removing user %s from %s sheet in file %s", pwUser, automatedSheet, config.Filename)
-				return err
+				return fmt.Errorf("failed removing user %s from %s sheet in file %s: %s", pwUser, automatedSheet, input.Filename, err)
 			}
 			continue
 		}
@@ -103,8 +97,7 @@ func syncPasswordManagerUsersToMACFINUsers(f *excelize.File, config *Portal) err
 
 	err = f.SaveAs(config.Filename)
 	if err != nil {
-		config.errorLog.Printf("failed saving %s after synchronizing automated sheet users to macFin users", config.Filename)
-		return err
+		return fmt.Errorf("failed saving %s after synchronizing automated sheet users to MACFin users: %s", input.Filename, err)
 	}
 
 	return nil
@@ -199,19 +192,14 @@ func updateMacFinUsers(f *excelize.File, config *Portal) error {
 			if password != macPassword {
 				err := writeCell(f, config.Filename, config.SheetName, passwordX+sheetOffset, i+rowOffset+sheetOffset, password)
 				if err != nil {
-					config.errorLog.Printf("error setting new password for user %s in sheet %s on row %d",
-						user, config.SheetName, i+rowOffset+sheetOffset)
-					return err
+					return fmt.Errorf("error setting new password for user %s in sheet %s on row %d: %s", user, input.SheetName, i+rowOffset+sheetOffset, err)
 				}
 				numPasswordsUpdated++
 			}
 		} else {
-			config.errorLog.Printf("macFin user %s missing from PasswordManager users; failed to update sheet %s with new passwords",
-				user, config.SheetName)
-			return err
+			return fmt.Errorf("macFin user %s missing from PasswordManager users; failed to update sheet %s with new passwords", user, input.SheetName)
 		}
 	}
-	config.infoLog.Printf("successfully updated %d passwords for users in sheet %s in file %s",
-		numPasswordsUpdated, config.SheetName, config.Filename)
+
 	return nil
 }
