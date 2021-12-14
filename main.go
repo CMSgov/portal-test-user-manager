@@ -142,15 +142,16 @@ func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	input := &Input{
-		SheetName:                    os.Getenv("MACFINSHEETNAME"),
-		UsernameHeader:               os.Getenv("USERNAMEHEADER"),
-		PasswordHeader:               os.Getenv("PASSWORDHEADER"),
-		Filename:                     os.Getenv("FILENAME"),
-		AutomatedSheetPassword:       os.Getenv("AUTOMATEDSHEETPASSWORD"),
-		automatedSheetName:           "PasswordManager",
-		automatedSheetColNameToIndex: map[string]int{"colUser": 0, "colPortal": 1, "colPrevious": 2, "colTimestamp": 3},
-		rowOffset:                    1,
-		sheetOffset:                  1,
+		SheetName:              os.Getenv("MACFINSHEETNAME"),
+		UsernameHeader:         os.Getenv("USERNAMEHEADER"),
+		PasswordHeader:         os.Getenv("PASSWORDHEADER"),
+		Filename:               os.Getenv("FILENAME"),
+		AutomatedSheetPassword: os.Getenv("AUTOMATEDSHEETPASSWORD"),
+		automatedSheetName:     "PasswordManager",
+		automatedSheetColNameToIndex: map[string]int{
+			"colUser": 0, "colPortal": 1, "colPrevious": 2, "colTimestamp": 3, "colDelete": 4},
+		rowOffset:   1,
+		sheetOffset: 1,
 	}
 
 	portal := &Portal{

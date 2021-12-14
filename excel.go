@@ -38,23 +38,25 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 	return users, nil
 }
 
-func getPasswordManagerUsers(f *excelize.File, input *Input) (map[string]string, error) {
+func getPasswordManagerUsers(f *excelize.File, input *Input) (usersToPassword map[string]string, usersToRow map[string]int, err error) {
 	automatedSheet := input.automatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", automatedSheet, input.Filename, err)
+		return nil, nil, fmt.Errorf("failed getting rows from %s in %s: %s", automatedSheet, input.Filename, err)
 	}
 
 	rowOffset := input.rowOffset
 	colUser := input.automatedSheetColNameToIndex["colUser"]
 	colPortal := input.automatedSheetColNameToIndex["colPortal"]
 
-	passwordManagerUsersToPassword := make(map[string]string)
-	for _, row := range rows[rowOffset:] {
-		passwordManagerUsersToPassword[row[colUser]] = row[colPortal]
+	usersToPassword = make(map[string]string)
+	usersToRow = make(map[string]int)
+	for i, row := range rows[rowOffset:] {
+		usersToPassword[row[colUser]] = row[colPortal]
+		usersToRow[row[colUser]] = i
 	}
 
-	return passwordManagerUsersToPassword, nil
+	return usersToPassword, usersToRow, nil
 }
 
 // Sync PasswordManager usernames with MACFin users
@@ -64,46 +66,59 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 		return err
 	}
 
-	passwordManagerUsersToPassword, err := getPasswordManagerUsers(f, input)
+	usersToPassword, usersToRow, err := getPasswordManagerUsers(f, input)
 	if err != nil {
 		return err
 	}
 
-	numRows := len(passwordManagerUsersToPassword)
 	rowOffset := input.rowOffset
 	sheetOffset := input.sheetOffset
+	numRows := len(usersToPassword) + rowOffset
 	automatedSheet := input.automatedSheetName
 	numCols := len(input.automatedSheetColNameToIndex)
+	colDelete := input.automatedSheetColNameToIndex["colDelete"]
 
 	// add new MACFin users to automatedSheet
-	for user, password := range macFinUsersToPasswords {
-		if _, ok := passwordManagerUsersToPassword[user]; !ok {
-			values := []string{user, password, password, "Rotate Now"}
-			f.InsertRow(automatedSheet, numRows+1) // insert before numRows+1
-			numRows++
-			// write row
-			for j := 0; j < numCols; j++ {
-				err := writeCell(f, automatedSheet, j+sheetOffset, numRows, values[j])
+	for macFinUser, password := range macFinUsersToPasswords {
+		if _, ok := usersToPassword[macFinUser]; !ok {
+			values := []string{macFinUser, password, password, "Rotate Now", ""}
+			// write new row
+			for col := 0; col < numCols; col++ {
+				err := writeCell(f, automatedSheet, col+sheetOffset, numRows+1, values[col])
 				if err != nil {
-					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", user, automatedSheet, input.Filename, err)
+					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", macFinUser, automatedSheet, input.Filename, err)
 				}
+			}
+			numRows++
+			continue
+		}
+	}
+
+	// mark users for deletion from automatedSheet
+	for pwUser, row := range usersToRow {
+		if _, ok := macFinUsersToPasswords[pwUser]; !ok {
+			// pwUser is not in MACFin users; mark pwUser for deletion from automatedSheet
+			err := writeCell(f, automatedSheet, colDelete+sheetOffset, row+rowOffset+sheetOffset, "delete")
+			if err != nil {
+				return fmt.Errorf("failed to mark user %s from sheet %s for deletion: %s", pwUser, automatedSheet, err)
 			}
 			continue
 		}
 	}
 
-	// remove deleted MACFin users from PasswordManager sheet
-	rowIndx := 1
-	for pwUser := range passwordManagerUsersToPassword {
-		if _, ok := macFinUsersToPasswords[pwUser]; !ok {
-			// pwUser is not in MACFin users; remove pwUser from PasswordManager
-			err := f.RemoveRow(automatedSheet, rowIndx+rowOffset)
-			if err != nil {
-				return fmt.Errorf("failed removing user %s from %s sheet in file %s: %s", pwUser, automatedSheet, input.Filename, err)
-			}
-			continue
+	// delete users from automatedSheet that are marked for deletion
+	// iterate from bottom row to top
+	for i := numRows; i >= rowOffset+sheetOffset; i-- {
+		value, err := getCellValue(f, automatedSheet, colDelete+sheetOffset, i)
+		if err != nil {
+			return fmt.Errorf("failed to read cell value from col %d in sheet %s: %s", colDelete+rowOffset+sheetOffset, automatedSheet, err)
 		}
-		rowIndx++
+		if value == "delete" {
+			err := f.RemoveRow(automatedSheet, i)
+			if err != nil {
+				return fmt.Errorf("failed removing row %d from %s sheet in file %s: %s", i, automatedSheet, input.Filename, err)
+			}
+		}
 	}
 
 	err = f.Save()
@@ -112,6 +127,18 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	}
 
 	return nil
+}
+
+func getCellValue(f *excelize.File, sheet string, xCoord, yCoord int) (string, error) {
+	cellName, err := excelize.CoordinatesToCellName(xCoord, yCoord)
+	if err != nil {
+		return "", err
+	}
+	value, err := f.GetCellValue(sheet, cellName)
+	if err != nil {
+		return "", err
+	}
+	return value, nil
 }
 
 func writeCell(f *excelize.File, sheet string, xCoord, yCoord int, value string) error {
@@ -178,7 +205,7 @@ func validateFileSize(f *excelize.File, input *Input) (errors []string) {
 
 // Write new password to password column in the testing sheet
 func updateMACFinUsers(f *excelize.File, input *Input) error {
-	passwordManagerUsersToPassword, err := getPasswordManagerUsers(f, input)
+	passwordManagerUsersToPassword, _, err := getPasswordManagerUsers(f, input)
 	if err != nil {
 		return err
 	}
