@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	thirtyDays  int = 30
-	rowOffset   int = 1
-	sheetOffset int = 1
+	maxPasswordAgeDays int = 30
+	rowOffset          int = 1
+	sheetOffset        int = 1
 )
 
 type Input struct {
@@ -72,18 +72,19 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 
 	for i, row := range rows[rowOffset:] {
 		now = time.Now().UTC()
-		name := row[user]
+		name := row[colUser]
 
-		if row[timestamp] == "Rotate Now" {
+		if row[colTimestamp] == "Rotate Now" {
 			// force rotation
-			lastRotated = now.AddDate(0, 0, -thirtyDays-2)
+			lastRotated = now.AddDate(0, 0, -maxPasswordAgeDays-1)
 		} else {
-			lastRotated, err = time.Parse(time.UnixDate, row[timestamp])
+			lastRotated, err = time.Parse(time.UnixDate, row[colTimestamp])
 			if err != nil {
 				return fmt.Errorf("error parsing timestamp from row %d for user %s: %s", i+rowOffset, name, err)
 			}
 		}
 
+		if now.Before(lastRotated.AddDate(0, 0, maxPasswordAgeDays)) {
 			log.Printf("%s: no rotation needed", row[colUser])
 			numNoRotation++
 			continue

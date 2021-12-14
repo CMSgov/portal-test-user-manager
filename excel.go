@@ -5,13 +5,14 @@ import (
 )
 
 const (
-	user = iota
-	portal
-	previous
-	timestamp
-	numCols        int    = 4
-	automatedSheet string = "PasswordManager"
+	colUser = iota
+	colPortal
+	colPrevious
+	colTimestamp
+	numCols
 )
+
+const automatedSheet string = "PasswordManager"
 
 func getHeaderToXCoord(headerRow []string) map[string]int {
 	headerToXCoord := make(map[string]int, len(headerRow))
@@ -52,7 +53,7 @@ func getPasswordManagerUsers(f *excelize.File, input *Input) (map[string]string,
 
 	passwordManagerUsersToPassword := make(map[string]string)
 	for _, row := range rows[rowOffset:] {
-		passwordManagerUsersToPassword[row[user]] = row[portal]
+		passwordManagerUsersToPassword[row[colUser]] = row[colPortal]
 	}
 
 	return passwordManagerUsersToPassword, nil
