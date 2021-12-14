@@ -25,7 +25,6 @@ type Input struct {
 }
 
 type Portal struct {
-	*Input
 	Environment string
 	Hostname    string
 	IDMHostname string // identity management hostname
@@ -48,7 +47,7 @@ func init() {
 	}
 }
 
-func resetPasswords(f *excelize.File, config *Portal) (err error) {
+func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) {
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
 		return err
@@ -90,7 +89,7 @@ func resetPasswords(f *excelize.File, config *Portal) (err error) {
 			continue
 		} else {
 			newPassword := randomPasswords[i]
-			err = changeUserPassword(client, config, name, row[portal], newPassword)
+			err = changeUserPassword(client, portal, name, row[colPortal], newPassword)
 			if err != nil {
 				numFail++
 				log.Printf("Error: user %s password reset FAIL: %s", name, err)
@@ -98,21 +97,21 @@ func resetPasswords(f *excelize.File, config *Portal) (err error) {
 			}
 			numSuccess++
 			// copy portal col password to previous col
-			err = copyCell(f, config.Filename, portal+sheetOffset, i+rowOffset+sheetOffset, previous+sheetOffset, i+rowOffset+sheetOffset)
+			err = copyCell(f, input.Filename, colPortal+sheetOffset, i+rowOffset+sheetOffset, colPrevious+sheetOffset, i+rowOffset+sheetOffset)
 			if err != nil {
 				return fmt.Errorf("failed to write previous password %s to sheet %s, row %d for user %s: %s",
 					row[colPortal], input.SheetName, i+rowOffset, name, err)
 			}
 
 			// Write new password to portal col
-			err = writeCell(f, config.Filename, automatedSheet, portal+sheetOffset, i+rowOffset+sheetOffset, newPassword)
+			err = writeCell(f, input.Filename, automatedSheet, colPortal+sheetOffset, i+rowOffset+sheetOffset, newPassword)
 			if err != nil {
 				return fmt.Errorf("failed to write new password to sheet %s in row %d for user %s: %v; manually set password for user",
 					input.SheetName, i+rowOffset+sheetOffset, name, err)
 			}
 			// set timestamp
 			ts := now.Format(time.UnixDate)
-			err = writeCell(f, config.Filename, automatedSheet, timestamp+sheetOffset, i+rowOffset+sheetOffset, ts)
+			err = writeCell(f, input.Filename, automatedSheet, colTimestamp+sheetOffset, i+rowOffset+sheetOffset, ts)
 			if err != nil {
 				return fmt.Errorf("failed to write timestamp %s to sheet %s in row %d for user %s: %s", ts,
 					input.SheetName, i+rowOffset+sheetOffset, name, err)
@@ -140,7 +139,6 @@ func main() {
 	}
 
 	portal := &Portal{
-		Input:       input,
 		Environment: os.Getenv("ENVIRONMENT"),
 		Hostname:    os.Getenv("PORTALHOSTNAME"),
 		IDMHostname: os.Getenv("IDMHOSTNAME"),
@@ -153,7 +151,7 @@ func main() {
 
 	// true means "block action"
 	err = f.ProtectSheet(automatedSheet, &excelize.FormatSheetProtection{
-		Password:            portal.SheetPassword,
+		Password:            input.SheetPassword,
 		SelectLockedCells:   true,
 		SelectUnlockedCells: true,
 	})
@@ -169,17 +167,17 @@ func main() {
 		log.Fatal("Error: File size not supported. Exiting program.")
 	}
 
-	err = syncPasswordManagerUsersToMACFINUsers(f, portal)
+	err = syncPasswordManagerUsersToMACFinUsers(f, input)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = resetPasswords(f, portal)
+	err = resetPasswords(f, input, portal)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = updateMacFinUsers(f, portal)
+	err = updateMACFinUsers(f, input)
 	if err != nil {
 		log.Fatal(err)
 	}

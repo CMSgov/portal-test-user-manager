@@ -101,10 +101,10 @@ func sendRequest(client *http.Client, method, urlstr string, customHeaders map[s
 	return nil
 }
 
-func loginStep(client *http.Client, config *Portal, username, password string) error {
+func loginStep(client *http.Client, portal *Portal, username, password string) error {
 	// GET login page at scheme+hostname+/portal/
-	hostname := config.Hostname
-	idmHostname := config.IdmHostname
+	hostname := portal.Hostname
+	idmHostname := portal.IDMHostname
 
 	headers := map[string][]string{
 		"Host":                      {hostname},
@@ -191,11 +191,11 @@ func loginStep(client *http.Client, config *Portal, username, password string) e
 	return nil
 }
 
-func changePasswordStep(client *http.Client, config *Portal, oldPassword, newPassword string) error {
+func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPassword string) error {
 	// Get userID from response body of:
 	// GET https://idm.cms.gov/api/v1/sessions/me/lifecycle/refresh
-	hostname := config.Hostname
-	idmHostname := config.IdmHostname
+	hostname := portal.Hostname
+	idmHostname := portal.IDMHostname
 
 	headers := map[string][]string{
 		"Host":                       {idmHostname},
@@ -250,26 +250,26 @@ func changePasswordStep(client *http.Client, config *Portal, oldPassword, newPas
 	return nil
 }
 
-func changeUserPassword(client *http.Client, config *Portal, username, oldPassword, newPassword string) error {
-	err := loginStep(client, config, username, oldPassword)
+func changeUserPassword(client *http.Client, portal *Portal, username, oldPassword, newPassword string) error {
+	err := loginStep(client, portal, username, oldPassword)
 	if err != nil {
 		return err
 	}
 
-	err = changePasswordStep(client, config, oldPassword, newPassword)
+	err = changePasswordStep(client, portal, oldPassword, newPassword)
 	if err != nil {
 		return err
 	}
 
-	err = logoutStep(client, config)
+	err = logoutStep(client, portal)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func logoutStep(client *http.Client, config *Portal) (err error) {
-	hostname := config.Hostname
+func logoutStep(client *http.Client, portal *Portal) (err error) {
+	hostname := portal.Hostname
 	err = sendRequest(client, http.MethodGet, scheme+hostname+logoutPath, nil, nil, nil)
 	if err != nil {
 		return err

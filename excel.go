@@ -20,6 +20,9 @@ func getHeaderToXCoord(headerRow []string) map[string]int {
 	}
 	return headerToXCoord
 }
+
+func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
+	rows, err := f.GetRows(input.SheetName)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", input.SheetName, input.Filename, err)
 	}
@@ -27,8 +30,8 @@ func getHeaderToXCoord(headerRow []string) map[string]int {
 	users := make(map[string]string)
 
 	headerToXCoord := getHeaderToXCoord(rows[0])
-	usernameXCoord := headerToXCoord[config.UsernameHeader]
-	passwordXCoord := headerToXCoord[config.PasswordHeader]
+	usernameXCoord := headerToXCoord[input.UsernameHeader]
+	passwordXCoord := headerToXCoord[input.PasswordHeader]
 
 	for _, row := range rows[rowOffset:] {
 		// check if row is empty
@@ -41,7 +44,7 @@ func getHeaderToXCoord(headerRow []string) map[string]int {
 	return users, nil
 }
 
-func getPasswordManagerUsers(f *excelize.File, config *Portal) (map[string]string, error) {
+func getPasswordManagerUsers(f *excelize.File, input *Input) (map[string]string, error) {
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", automatedSheet, input.Filename, err)
@@ -55,14 +58,13 @@ func getPasswordManagerUsers(f *excelize.File, config *Portal) (map[string]strin
 	return passwordManagerUsersToPassword, nil
 }
 
-// Sync PasswordManager usernames with MACFIN users
-func syncPasswordManagerUsersToMACFINUsers(f *excelize.File, config *Portal) error {
-	macFinUsersToPasswords, err := getMCFinUsers(f, config)
+func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error {
+	macFinUsersToPasswords, err := getMACFinUsers(f, input)
 	if err != nil {
 		return err
 	}
 
-	passwordManagerUsersToPassword, err := getPasswordManagerUsers(f, config)
+	passwordManagerUsersToPassword, err := getPasswordManagerUsers(f, input)
 	if err != nil {
 		return err
 	}
@@ -77,7 +79,7 @@ func syncPasswordManagerUsersToMACFINUsers(f *excelize.File, config *Portal) err
 			numRows++
 			// write row
 			for j := 0; j < numCols; j++ {
-				err := writeCell(f, config.Filename, automatedSheet, j+sheetOffset, numRows, values[j])
+				err := writeCell(f, input.Filename, automatedSheet, j+sheetOffset, numRows, values[j])
 				if err != nil {
 					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", user, automatedSheet, input.Filename, err)
 				}
@@ -100,7 +102,7 @@ func syncPasswordManagerUsersToMACFINUsers(f *excelize.File, config *Portal) err
 		rowIndx++
 	}
 
-	err = f.SaveAs(config.Filename)
+	err = f.SaveAs(input.Filename)
 	if err != nil {
 		return fmt.Errorf("failed saving %s after synchronizing automated sheet users to MACFin users: %s", input.Filename, err)
 	}
@@ -151,10 +153,10 @@ func copyCell(f *excelize.File, filename string, srcX, srcY, destX, destY int) e
 	return nil
 }
 
-func validateFileSize(f *excelize.File, config *Input) (errors []string) {
+func validateFileSize(f *excelize.File, input *Input) (errors []string) {
 	v := new(Validator)
 
-	rows, err := f.GetRows(config.SheetName)
+	rows, err := f.GetRows(input.SheetName)
 	if err != nil {
 		v.Errorf("Error getting rows: %s", err)
 
@@ -171,21 +173,21 @@ func validateFileSize(f *excelize.File, config *Input) (errors []string) {
 }
 
 // Write new password to password column in the testing sheet
-func updateMacFinUsers(f *excelize.File, config *Portal) error {
-	passwordManagerUsersToPassword, err := getPasswordManagerUsers(f, config)
+func updateMACFinUsers(f *excelize.File, input *Input) error {
+	passwordManagerUsersToPassword, err := getPasswordManagerUsers(f, input)
 	if err != nil {
 		return err
 	}
 
-	rows, err := f.GetRows(config.SheetName)
+	rows, err := f.GetRows(input.SheetName)
 	if err != nil {
 		return err
 	}
 
 	numPasswordsUpdated := 0
 	headerNameToXCoord := getHeaderToXCoord(rows[0])
-	userX := headerNameToXCoord[config.UsernameHeader]
-	passwordX := headerNameToXCoord[config.PasswordHeader]
+	userX := headerNameToXCoord[input.UsernameHeader]
+	passwordX := headerNameToXCoord[input.PasswordHeader]
 
 	for i, row := range rows[rowOffset:] {
 		if row == nil {
@@ -195,7 +197,7 @@ func updateMacFinUsers(f *excelize.File, config *Portal) error {
 		macPassword := row[passwordX]
 		if password, ok := passwordManagerUsersToPassword[user]; ok {
 			if password != macPassword {
-				err := writeCell(f, config.Filename, config.SheetName, passwordX+sheetOffset, i+rowOffset+sheetOffset, password)
+				err := writeCell(f, input.Filename, input.SheetName, passwordX+sheetOffset, i+rowOffset+sheetOffset, password)
 				if err != nil {
 					return fmt.Errorf("error setting new password for user %s in sheet %s on row %d: %s", user, input.SheetName, i+rowOffset+sheetOffset, err)
 				}
