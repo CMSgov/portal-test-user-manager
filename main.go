@@ -35,14 +35,12 @@ type Creds struct {
 	NewPassword string
 }
 
-var client *http.Client
-
-func init() {
+func portalClient() *http.Client {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		log.Fatal("error creating cookiejar")
 	}
-	client = &http.Client{
+	return &http.Client{
 		Jar: jar,
 	}
 }
@@ -52,6 +50,8 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 	if err != nil {
 		return err
 	}
+
+	client := portalClient()
 
 	var now time.Time
 
