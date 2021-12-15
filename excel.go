@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -82,12 +83,11 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	numRows := len(userToPasswordRow) + rowOffset
 	automatedSheet := input.automatedSheetName
 	numCols := len(input.automatedSheetColNameToIndex)
-	colDelete := input.automatedSheetColNameToIndex["colDelete"]
 
 	// add new MACFin users to automatedSheet
 	for macFinUser, password := range macFinUsersToPasswords {
 		if _, ok := userToPasswordRow[macFinUser]; !ok {
-			values := []string{macFinUser, password, password, "Rotate Now", ""}
+			values := []string{macFinUser, password, password, "Rotate Now"}
 			// write new row
 			for col := 0; col < numCols; col++ {
 				err := writeCell(f, automatedSheet, col+sheetOffset, numRows+1, values[col])
@@ -100,30 +100,24 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 		}
 	}
 
-	// mark users for deletion from automatedSheet
+	// get rows for deletion from automatedSheet
+	rowsToDelete := []int{}
 	for pwUser, pwRow := range userToPasswordRow {
 		if _, ok := macFinUsersToPasswords[pwUser]; !ok {
-			// pwUser is not in MACFin users; mark pwUser for deletion from automatedSheet
-			err := writeCell(f, automatedSheet, colDelete+sheetOffset, pwRow.Row+rowOffset+sheetOffset, "delete")
-			if err != nil {
-				return fmt.Errorf("failed to mark user %s from sheet %s for deletion: %s", pwUser, automatedSheet, err)
-			}
+			// pwUser is not in MACFin users; mark row for deletion from automatedSheet
+			rowsToDelete = append(rowsToDelete, pwRow.Row)
 			continue
 		}
 	}
 
-	// delete users from automatedSheet that are marked for deletion
-	// iterate from bottom row to top
-	for i := numRows; i >= rowOffset+sheetOffset; i-- {
-		value, err := getCellValue(f, automatedSheet, colDelete+sheetOffset, i)
+	// delete rows from automatedSheet that are marked for deletion
+	// iterate in descending order
+	sort.Ints(rowsToDelete)
+	for idx := len(rowsToDelete) - 1; idx >= 0; idx-- {
+		rowToDelete := rowsToDelete[idx] + rowOffset + sheetOffset
+		err := f.RemoveRow(automatedSheet, rowToDelete)
 		if err != nil {
-			return fmt.Errorf("failed to read cell value from col %d in sheet %s: %s", colDelete+rowOffset+sheetOffset, automatedSheet, err)
-		}
-		if value == "delete" {
-			err := f.RemoveRow(automatedSheet, i)
-			if err != nil {
-				return fmt.Errorf("failed removing row %d from %s sheet in file %s: %s", i, automatedSheet, input.Filename, err)
-			}
+			return fmt.Errorf("failed removing row %d from %s sheet in file %s: %s", rowToDelete, automatedSheet, input.Filename, err)
 		}
 	}
 
@@ -133,18 +127,6 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	}
 
 	return nil
-}
-
-func getCellValue(f *excelize.File, sheet string, xCoord, yCoord int) (string, error) {
-	cellName, err := excelize.CoordinatesToCellName(xCoord, yCoord)
-	if err != nil {
-		return "", err
-	}
-	value, err := f.GetCellValue(sheet, cellName)
-	if err != nil {
-		return "", err
-	}
-	return value, nil
 }
 
 func writeCell(f *excelize.File, sheet string, xCoord, yCoord int, value string) error {

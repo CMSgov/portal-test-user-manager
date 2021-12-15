@@ -149,7 +149,7 @@ func main() {
 		AutomatedSheetPassword: os.Getenv("AUTOMATEDSHEETPASSWORD"),
 		automatedSheetName:     "PasswordManager",
 		automatedSheetColNameToIndex: map[string]int{
-			"colUser": 0, "colPortal": 1, "colPrevious": 2, "colTimestamp": 3, "colDelete": 4},
+			"colUser": 0, "colPortal": 1, "colPrevious": 2, "colTimestamp": 3},
 		rowOffset:   1,
 		sheetOffset: 1,
 	}
