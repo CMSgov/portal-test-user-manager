@@ -38,7 +38,7 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 	return users, nil
 }
 
-func getPasswordManagerUsers(f *excelize.File, input *Input) (usersToPassword map[string]string, usersToRow map[string]int, err error) {
+func getManagedUsers(f *excelize.File, input *Input) (usersToPassword map[string]string, usersToRow map[string]int, err error) {
 	automatedSheet := input.automatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
@@ -66,7 +66,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 		return err
 	}
 
-	_, usersToRow, err := getPasswordManagerUsers(f, input)
+	_, usersToRow, err := getManagedUsers(f, input)
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func validateFileSize(f *excelize.File, input *Input) (errors []string) {
 
 // Write new password to password column in the testing sheet
 func updateMACFinUsers(f *excelize.File, input *Input) error {
-	passwordManagerUsersToPassword, _, err := getPasswordManagerUsers(f, input)
+	passwordManagerUsersToPassword, _, err := getManagedUsers(f, input)
 	if err != nil {
 		return err
 	}
