@@ -24,7 +24,6 @@ type Input struct {
 	automatedSheetName           string // sheet managed by application
 	automatedSheetColNameToIndex map[string]int
 	rowOffset                    int // number of header rows (common to all sheets)
-	sheetOffset                  int // offset to 0-based coords since sheet coords are 1-based
 }
 
 type Portal struct {
@@ -63,7 +62,6 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 	numFail := 0
 	numNoRotation := 0
 	rowOffset := input.rowOffset
-	sheetOffset := input.sheetOffset
 	colUser := input.automatedSheetColNameToIndex["colUser"]
 	colPortal := input.automatedSheetColNameToIndex["colPortal"]
 	colPrevious := input.automatedSheetColNameToIndex["colPrevious"]
@@ -108,24 +106,24 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 			}
 			numSuccess++
 			// copy portal col password to previous col
-			err = copyCell(f, automatedSheet, colPortal+sheetOffset, i+rowOffset+sheetOffset, colPrevious+sheetOffset, i+rowOffset+sheetOffset)
+			err = copyCell(f, automatedSheet, colPortal, i+rowOffset, colPrevious, i+rowOffset)
 			if err != nil {
 				return fmt.Errorf("failed to write previous password %s to sheet %s, row %d for user %s: %s",
 					row[colPortal], input.SheetName, i+rowOffset, name, err)
 			}
 
 			// Write new password to portal col
-			err = writeCell(f, automatedSheet, colPortal+sheetOffset, i+rowOffset+sheetOffset, newPassword)
+			err := writeCell(f, automatedSheet, colPortal, i+rowOffset, newPassword)
 			if err != nil {
 				return fmt.Errorf("failed to write new password to sheet %s in row %d for user %s: %v; manually set password for user",
-					input.SheetName, i+rowOffset+sheetOffset, name, err)
+					input.SheetName, toSheetCoord(i+rowOffset), name, err)
 			}
 			// set timestamp
 			ts := now.Format(time.UnixDate)
-			err = writeCell(f, automatedSheet, colTimestamp+sheetOffset, i+rowOffset+sheetOffset, ts)
+			err = writeCell(f, automatedSheet, colTimestamp, i+rowOffset, ts)
 			if err != nil {
 				return fmt.Errorf("failed to write timestamp %s to sheet %s in row %d for user %s: %s", ts,
-					input.SheetName, i+rowOffset+sheetOffset, name, err)
+					input.SheetName, toSheetCoord(i+rowOffset), name, err)
 			}
 
 			log.Printf("%s: rotation complete", row[colUser])
@@ -150,8 +148,7 @@ func main() {
 		automatedSheetName:     "PasswordManager",
 		automatedSheetColNameToIndex: map[string]int{
 			"colUser": 0, "colPortal": 1, "colPrevious": 2, "colTimestamp": 3},
-		rowOffset:   1,
-		sheetOffset: 1,
+		rowOffset: 1,
 	}
 
 	portal := &Portal{

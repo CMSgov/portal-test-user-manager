@@ -12,6 +12,10 @@ type PasswordRow struct {
 	Row      int
 }
 
+func toSheetCoord(coord int) int {
+	return coord + 1
+}
+
 func getHeaderToXCoord(headerRow []string) map[string]int {
 	headerToXCoord := make(map[string]int, len(headerRow))
 	for i, cell := range headerRow {
@@ -79,7 +83,6 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	}
 
 	rowOffset := input.rowOffset
-	sheetOffset := input.sheetOffset
 	numRows := len(userToPasswordRow) + rowOffset
 	automatedSheet := input.automatedSheetName
 	numCols := len(input.automatedSheetColNameToIndex)
@@ -90,7 +93,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 			values := []string{macFinUser, password, password, "Rotate Now"}
 			// write new row
 			for col := 0; col < numCols; col++ {
-				err := writeCell(f, automatedSheet, col+sheetOffset, numRows+1, values[col])
+				err := writeCell(f, automatedSheet, col, numRows, values[col])
 				if err != nil {
 					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", macFinUser, automatedSheet, input.Filename, err)
 				}
@@ -114,7 +117,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	// iterate in descending order
 	sort.Ints(rowsToDelete)
 	for idx := len(rowsToDelete) - 1; idx >= 0; idx-- {
-		rowToDelete := rowsToDelete[idx] + rowOffset + sheetOffset
+		rowToDelete := toSheetCoord(rowsToDelete[idx] + rowOffset)
 		err := f.RemoveRow(automatedSheet, rowToDelete)
 		if err != nil {
 			return fmt.Errorf("failed removing row %d from %s sheet in file %s: %s", rowToDelete, automatedSheet, input.Filename, err)
@@ -130,7 +133,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 }
 
 func writeCell(f *excelize.File, sheet string, xCoord, yCoord int, value string) error {
-	cellName, err := excelize.CoordinatesToCellName(xCoord, yCoord)
+	cellName, err := excelize.CoordinatesToCellName(toSheetCoord(xCoord), toSheetCoord(yCoord))
 	if err != nil {
 		return err
 	}
@@ -148,11 +151,11 @@ func writeCell(f *excelize.File, sheet string, xCoord, yCoord int, value string)
 
 // Copy cell in automatedSheet
 func copyCell(f *excelize.File, automatedSheetName string, srcX, srcY, destX, destY int) error {
-	srcCell, err := excelize.CoordinatesToCellName(srcX, srcY)
+	srcCell, err := excelize.CoordinatesToCellName(toSheetCoord(srcX), toSheetCoord(srcY))
 	if err != nil {
 		return err
 	}
-	destCell, err := excelize.CoordinatesToCellName(destX, destY)
+	destCell, err := excelize.CoordinatesToCellName(toSheetCoord(destX), toSheetCoord(destY))
 	if err != nil {
 		return err
 	}
@@ -208,7 +211,6 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 	userX := headerNameToXCoord[input.UsernameHeader]
 	passwordX := headerNameToXCoord[input.PasswordHeader]
 	rowOffset := input.rowOffset
-	sheetOffset := input.sheetOffset
 
 	for i, row := range rows[rowOffset:] {
 		if row == nil {
@@ -218,9 +220,9 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 		macPassword := row[passwordX]
 		if pwRow, ok := userToPasswordRow[user]; ok {
 			if pwRow.Password != macPassword {
-				err := writeCell(f, input.SheetName, passwordX+sheetOffset, i+rowOffset+sheetOffset, pwRow.Password)
+				err := writeCell(f, input.SheetName, passwordX, i+rowOffset, pwRow.Password)
 				if err != nil {
-					return fmt.Errorf("error setting new password for user %s in sheet %s on row %d: %s", user, input.SheetName, i+rowOffset+sheetOffset, err)
+					return fmt.Errorf("error setting new password for user %s in sheet %s in row %d: %s", user, input.SheetName, toSheetCoord(i+rowOffset), err)
 				}
 				numPasswordsUpdated++
 			}
