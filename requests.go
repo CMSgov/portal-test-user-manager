@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -88,12 +89,15 @@ func sendRequest(client *http.Client, method, urlstr string, customHeaders map[s
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		b, _ := io.ReadAll(resp.Body)
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("failed to read response body: %s", err)
+		}
 		return fmt.Errorf("got HTTP status code %d with body: \n%s", resp.StatusCode, string(b))
 	}
 
 	if userData != nil {
-		err = json.NewDecoder(resp.Body).Decode(&userData)
+		err = json.NewDecoder(resp.Body).Decode(userData)
 		if err != nil {
 			return err
 		}
