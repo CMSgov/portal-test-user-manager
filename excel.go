@@ -35,7 +35,7 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 	headerToXCoord := getHeaderToXCoord(rows[0])
 	usernameXCoord := headerToXCoord[input.UsernameHeader]
 	passwordXCoord := headerToXCoord[input.PasswordHeader]
-	rowOffset := input.rowOffset
+	rowOffset := input.RowOffset
 
 	for _, row := range rows[rowOffset:] {
 		// check if row is empty
@@ -49,15 +49,15 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 }
 
 func getManagedUsers(f *excelize.File, input *Input) (map[string]PasswordRow, error) {
-	automatedSheet := input.automatedSheetName
+	automatedSheet := input.AutomatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", automatedSheet, input.Filename, err)
 	}
 
-	rowOffset := input.rowOffset
-	colUser := input.automatedSheetColNameToIndex["colUser"]
-	colPortal := input.automatedSheetColNameToIndex["colPortal"]
+	rowOffset := input.RowOffset
+	colUser := input.AutomatedSheetColNameToIndex["colUser"]
+	colPortal := input.AutomatedSheetColNameToIndex["colPortal"]
 	userToPasswordRow := make(map[string]PasswordRow)
 
 	for i, row := range rows[rowOffset:] {
@@ -82,10 +82,10 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 		return err
 	}
 
-	rowOffset := input.rowOffset
+	rowOffset := input.RowOffset
 	numRows := len(userToPasswordRow) + rowOffset
-	automatedSheet := input.automatedSheetName
-	numCols := len(input.automatedSheetColNameToIndex)
+	automatedSheet := input.AutomatedSheetName
+	numCols := len(input.AutomatedSheetColNameToIndex)
 
 	// add new MACFin users to automatedSheet
 	for macFinUser, password := range macFinUsersToPasswords {
@@ -210,7 +210,7 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 	headerNameToXCoord := getHeaderToXCoord(rows[0])
 	userX := headerNameToXCoord[input.UsernameHeader]
 	passwordX := headerNameToXCoord[input.PasswordHeader]
-	rowOffset := input.rowOffset
+	rowOffset := input.RowOffset
 
 	for i, row := range rows[rowOffset:] {
 		if row == nil {

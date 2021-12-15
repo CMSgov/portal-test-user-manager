@@ -21,9 +21,9 @@ type Input struct {
 	UsernameHeader               string
 	PasswordHeader               string
 	AutomatedSheetPassword       string
-	automatedSheetName           string // sheet managed by application
-	automatedSheetColNameToIndex map[string]int
-	rowOffset                    int // number of header rows (common to all sheets)
+	AutomatedSheetName           string // sheet managed by application
+	AutomatedSheetColNameToIndex map[string]int
+	RowOffset                    int // number of header rows (common to all sheets)
 }
 
 type Portal struct {
@@ -48,7 +48,7 @@ func portalClient() *http.Client {
 }
 
 func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) {
-	automatedSheet := input.automatedSheetName
+	automatedSheet := input.AutomatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
 		return err
@@ -61,11 +61,11 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 	numSuccess := 0
 	numFail := 0
 	numNoRotation := 0
-	rowOffset := input.rowOffset
-	colUser := input.automatedSheetColNameToIndex["colUser"]
-	colPortal := input.automatedSheetColNameToIndex["colPortal"]
-	colPrevious := input.automatedSheetColNameToIndex["colPrevious"]
-	colTimestamp := input.automatedSheetColNameToIndex["colTimestamp"]
+	rowOffset := input.RowOffset
+	colUser := input.AutomatedSheetColNameToIndex["colUser"]
+	colPortal := input.AutomatedSheetColNameToIndex["colPortal"]
+	colPrevious := input.AutomatedSheetColNameToIndex["colPrevious"]
+	colTimestamp := input.AutomatedSheetColNameToIndex["colTimestamp"]
 
 	var lastRotated time.Time
 
@@ -145,10 +145,10 @@ func main() {
 		PasswordHeader:         os.Getenv("PASSWORDHEADER"),
 		Filename:               os.Getenv("FILENAME"),
 		AutomatedSheetPassword: os.Getenv("AUTOMATEDSHEETPASSWORD"),
-		automatedSheetName:     "PasswordManager",
-		automatedSheetColNameToIndex: map[string]int{
+		AutomatedSheetName:     "PasswordManager",
+		AutomatedSheetColNameToIndex: map[string]int{
 			"colUser": 0, "colPortal": 1, "colPrevious": 2, "colTimestamp": 3},
-		rowOffset: 1,
+		RowOffset: 1,
 	}
 
 	portal := &Portal{
@@ -163,13 +163,13 @@ func main() {
 	}
 
 	// true means "block action"
-	err = f.ProtectSheet(input.automatedSheetName, &excelize.FormatSheetProtection{
+	err = f.ProtectSheet(input.AutomatedSheetName, &excelize.FormatSheetProtection{
 		Password:            input.AutomatedSheetPassword,
 		SelectLockedCells:   true,
 		SelectUnlockedCells: true,
 	})
 	if err != nil {
-		log.Fatalf("failed to protect %s sheet", input.automatedSheetName)
+		log.Fatalf("failed to protect %s sheet", input.AutomatedSheetName)
 	}
 
 	errors := validateFileSize(f, input)
