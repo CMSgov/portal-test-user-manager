@@ -6,6 +6,11 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+type PasswordRow struct {
+	Password string
+	Row      int
+}
+
 func getHeaderToXCoord(headerRow []string) map[string]int {
 	headerToXCoord := make(map[string]int, len(headerRow))
 	for i, cell := range headerRow {
@@ -38,25 +43,26 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 	return users, nil
 }
 
-func getManagedUsers(f *excelize.File, input *Input) (usersToPassword map[string]string, usersToRow map[string]int, err error) {
+func getManagedUsers(f *excelize.File, input *Input) (map[string]PasswordRow, error) {
 	automatedSheet := input.automatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed getting rows from %s in %s: %s", automatedSheet, input.Filename, err)
+		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", automatedSheet, input.Filename, err)
 	}
 
 	rowOffset := input.rowOffset
 	colUser := input.automatedSheetColNameToIndex["colUser"]
 	colPortal := input.automatedSheetColNameToIndex["colPortal"]
+	userToPasswordRow := make(map[string]PasswordRow)
 
-	usersToPassword = make(map[string]string)
-	usersToRow = make(map[string]int)
 	for i, row := range rows[rowOffset:] {
-		usersToPassword[row[colUser]] = row[colPortal]
-		usersToRow[row[colUser]] = i
+		userToPasswordRow[row[colUser]] = PasswordRow{
+			Password: row[colPortal],
+			Row:      i,
+		}
 	}
 
-	return usersToPassword, usersToRow, nil
+	return userToPasswordRow, nil
 }
 
 // Sync PasswordManager usernames with MACFin users
@@ -66,21 +72,21 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 		return err
 	}
 
-	_, usersToRow, err := getManagedUsers(f, input)
+	userToPasswordRow, err := getManagedUsers(f, input)
 	if err != nil {
 		return err
 	}
 
 	rowOffset := input.rowOffset
 	sheetOffset := input.sheetOffset
-	numRows := len(usersToRow) + rowOffset
+	numRows := len(userToPasswordRow) + rowOffset
 	automatedSheet := input.automatedSheetName
 	numCols := len(input.automatedSheetColNameToIndex)
 	colDelete := input.automatedSheetColNameToIndex["colDelete"]
 
 	// add new MACFin users to automatedSheet
 	for macFinUser, password := range macFinUsersToPasswords {
-		if _, ok := usersToRow[macFinUser]; !ok {
+		if _, ok := userToPasswordRow[macFinUser]; !ok {
 			values := []string{macFinUser, password, password, "Rotate Now", ""}
 			// write new row
 			for col := 0; col < numCols; col++ {
@@ -95,10 +101,10 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	}
 
 	// mark users for deletion from automatedSheet
-	for pwUser, row := range usersToRow {
+	for pwUser, pwRow := range userToPasswordRow {
 		if _, ok := macFinUsersToPasswords[pwUser]; !ok {
 			// pwUser is not in MACFin users; mark pwUser for deletion from automatedSheet
-			err := writeCell(f, automatedSheet, colDelete+sheetOffset, row+rowOffset+sheetOffset, "delete")
+			err := writeCell(f, automatedSheet, colDelete+sheetOffset, pwRow.Row+rowOffset+sheetOffset, "delete")
 			if err != nil {
 				return fmt.Errorf("failed to mark user %s from sheet %s for deletion: %s", pwUser, automatedSheet, err)
 			}
@@ -205,7 +211,7 @@ func validateFileSize(f *excelize.File, input *Input) (errors []string) {
 
 // Write new password to password column in the testing sheet
 func updateMACFinUsers(f *excelize.File, input *Input) error {
-	passwordManagerUsersToPassword, _, err := getManagedUsers(f, input)
+	userToPasswordRow, err := getManagedUsers(f, input)
 	if err != nil {
 		return err
 	}
@@ -228,9 +234,9 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 		}
 		user := row[userX]
 		macPassword := row[passwordX]
-		if password, ok := passwordManagerUsersToPassword[user]; ok {
-			if password != macPassword {
-				err := writeCell(f, input.SheetName, passwordX+sheetOffset, i+rowOffset+sheetOffset, password)
+		if pwRow, ok := userToPasswordRow[user]; ok {
+			if pwRow.Password != macPassword {
+				err := writeCell(f, input.SheetName, passwordX+sheetOffset, i+rowOffset+sheetOffset, pwRow.Password)
 				if err != nil {
 					return fmt.Errorf("error setting new password for user %s in sheet %s on row %d: %s", user, input.SheetName, i+rowOffset+sheetOffset, err)
 				}
