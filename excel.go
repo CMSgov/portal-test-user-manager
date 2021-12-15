@@ -57,12 +57,12 @@ func getManagedUsers(f *excelize.File, input *Input) (map[string]PasswordRow, er
 
 	rowOffset := input.RowOffset
 	colUser := input.AutomatedSheetColNameToIndex[ColUser]
-	colPortal := input.AutomatedSheetColNameToIndex[ColPortal]
+	colPassword := input.AutomatedSheetColNameToIndex[ColPassword]
 	userToPasswordRow := make(map[string]PasswordRow)
 
 	for i, row := range rows[rowOffset:] {
 		userToPasswordRow[row[colUser]] = PasswordRow{
-			Password: row[colPortal],
+			Password: row[colPassword],
 			Row:      i,
 		}
 	}

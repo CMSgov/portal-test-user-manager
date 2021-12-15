@@ -15,7 +15,7 @@ type Column int
 
 const (
 	ColUser Column = iota
-	ColPortal
+	ColPassword
 	ColPrevious
 	ColTimestamp
 )
@@ -71,7 +71,7 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 	numNoRotation := 0
 	rowOffset := input.RowOffset
 	colUser := input.AutomatedSheetColNameToIndex[ColUser]
-	colPortal := input.AutomatedSheetColNameToIndex[ColPortal]
+	colPassword := input.AutomatedSheetColNameToIndex[ColPassword]
 	colPrevious := input.AutomatedSheetColNameToIndex[ColPrevious]
 	colTimestamp := input.AutomatedSheetColNameToIndex[ColTimestamp]
 
@@ -106,7 +106,7 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 			continue
 		} else {
 			newPassword := randomPasswords[i]
-			err = changeUserPassword(client, portal, name, row[colPortal], newPassword)
+			err = changeUserPassword(client, portal, name, row[colPassword], newPassword)
 			if err != nil {
 				numFail++
 				log.Printf("Error: user %s password reset FAIL: %s", name, err)
@@ -114,14 +114,14 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 			}
 			numSuccess++
 			// copy portal col password to previous col
-			err = copyCell(f, automatedSheet, colPortal, i+rowOffset, colPrevious, i+rowOffset)
+			err = copyCell(f, automatedSheet, colPassword, i+rowOffset, colPrevious, i+rowOffset)
 			if err != nil {
 				return fmt.Errorf("failed to write previous password %s to sheet %s, row %d for user %s: %s",
-					row[colPortal], input.SheetName, i+rowOffset, name, err)
+					row[colPassword], input.SheetName, i+rowOffset, name, err)
 			}
 
 			// Write new password to portal col
-			err := writeCell(f, automatedSheet, colPortal, i+rowOffset, newPassword)
+			err := writeCell(f, automatedSheet, colPassword, i+rowOffset, newPassword)
 			if err != nil {
 				return fmt.Errorf("failed to write new password to sheet %s in row %d for user %s: %v; manually set password for user",
 					input.SheetName, toSheetCoord(i+rowOffset), name, err)
@@ -155,7 +155,7 @@ func main() {
 		AutomatedSheetPassword: os.Getenv("AUTOMATEDSHEETPASSWORD"),
 		AutomatedSheetName:     "PasswordManager",
 		AutomatedSheetColNameToIndex: map[Column]int{
-			ColUser: 0, ColPortal: 1, ColPrevious: 2, ColTimestamp: 3},
+			ColUser: 0, ColPassword: 1, ColPrevious: 2, ColTimestamp: 3},
 		RowOffset: 1,
 	}
 
