@@ -11,6 +11,15 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+type Column int
+
+const (
+	ColUser Column = iota
+	ColPortal
+	ColPrevious
+	ColTimestamp
+)
+
 const (
 	maxPasswordAgeDays int = 30
 )
@@ -22,7 +31,7 @@ type Input struct {
 	PasswordHeader               string
 	AutomatedSheetPassword       string
 	AutomatedSheetName           string // sheet managed by application
-	AutomatedSheetColNameToIndex map[string]int
+	AutomatedSheetColNameToIndex map[Column]int
 	RowOffset                    int // number of header rows (common to all sheets)
 }
 
@@ -61,10 +70,10 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 	numFail := 0
 	numNoRotation := 0
 	rowOffset := input.RowOffset
-	colUser := input.AutomatedSheetColNameToIndex["colUser"]
-	colPortal := input.AutomatedSheetColNameToIndex["colPortal"]
-	colPrevious := input.AutomatedSheetColNameToIndex["colPrevious"]
-	colTimestamp := input.AutomatedSheetColNameToIndex["colTimestamp"]
+	colUser := input.AutomatedSheetColNameToIndex[ColUser]
+	colPortal := input.AutomatedSheetColNameToIndex[ColPortal]
+	colPrevious := input.AutomatedSheetColNameToIndex[ColPrevious]
+	colTimestamp := input.AutomatedSheetColNameToIndex[ColTimestamp]
 
 	var lastRotated time.Time
 
@@ -145,8 +154,8 @@ func main() {
 		Filename:               os.Getenv("FILENAME"),
 		AutomatedSheetPassword: os.Getenv("AUTOMATEDSHEETPASSWORD"),
 		AutomatedSheetName:     "PasswordManager",
-		AutomatedSheetColNameToIndex: map[string]int{
-			"colUser": 0, "colPortal": 1, "colPrevious": 2, "colTimestamp": 3},
+		AutomatedSheetColNameToIndex: map[Column]int{
+			ColUser: 0, ColPortal: 1, ColPrevious: 2, ColTimestamp: 3},
 		RowOffset: 1,
 	}
 
