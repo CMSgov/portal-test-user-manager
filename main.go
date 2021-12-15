@@ -27,7 +27,6 @@ type Input struct {
 }
 
 type Portal struct {
-	Environment string
 	Hostname    string
 	IDMHostname string // identity management hostname
 }
@@ -152,7 +151,6 @@ func main() {
 	}
 
 	portal := &Portal{
-		Environment: os.Getenv("ENVIRONMENT"),
 		Hostname:    os.Getenv("PORTALHOSTNAME"),
 		IDMHostname: os.Getenv("IDMHOSTNAME"),
 	}
