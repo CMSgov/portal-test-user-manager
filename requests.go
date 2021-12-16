@@ -42,7 +42,7 @@ type userData struct {
 	SessionToken string `json:"sessionToken"`
 }
 
-func getCookie(c *http.Client, urlstr, cookieName string) *http.Cookie {
+func getCookie(c *http.Client, urlstr, cookieName string) (*http.Cookie, error) {
 	urlObj, err := url.Parse(urlstr)
 	if err != nil {
 		panic(err)
@@ -50,10 +50,10 @@ func getCookie(c *http.Client, urlstr, cookieName string) *http.Cookie {
 	cookies := c.Jar.Cookies(urlObj)
 	for _, c := range cookies {
 		if c.Name == cookieName {
-			return c
+			return c, nil
 		}
 	}
-	return nil
+	return nil, err
 }
 
 func sendRequest(client *http.Client, method, urlstr string, customHeaders map[string][]string, body []byte, userData interface{}) error {
@@ -229,7 +229,10 @@ func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPas
 		return err
 	}
 
-	portalXsrfTokenCookie := getCookie(client, scheme+hostname, "PORTAL-XSRF-TOKEN")
+	portalXsrfTokenCookie, err := getCookie(client, scheme+hostname, "PORTAL-XSRF-TOKEN")
+	if err != nil {
+		return err
+	}
 	headers = map[string][]string{
 		"sec-fetch-site":    {"same-origin"},
 		"sec-fetch-mode":    {"cors"},
