@@ -175,25 +175,6 @@ func copyCell(f *excelize.File, automatedSheetName string, srcX, srcY, destX, de
 	return nil
 }
 
-func validateFileSize(f *excelize.File, input *Input) (errors []string) {
-	v := new(Validator)
-
-	rows, err := f.GetRows(input.SheetName)
-	if err != nil {
-		v.Errorf("Error getting rows: %s", err)
-
-	}
-	if len(rows) > excelize.TotalRows {
-		v.Errorf("Number of rows %d exceeds max number %d", len(rows), excelize.TotalRows)
-	}
-
-	if len(rows[0]) > excelize.TotalColumns {
-		v.Errorf("Number of columns %d exceeds max number %d", len(rows[0]), excelize.TotalColumns)
-	}
-
-	return v.Errors
-}
-
 // Write new password to password column in the testing sheet
 func updateMACFinUsers(f *excelize.File, input *Input) error {
 	userToPasswordRow, err := getManagedUsers(f, input)

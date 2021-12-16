@@ -179,14 +179,6 @@ func main() {
 		log.Fatalf("failed to protect %s sheet", input.AutomatedSheetName)
 	}
 
-	errors := validateFileSize(f, input)
-	for _, err := range errors {
-		log.Println(err)
-	}
-	if len(errors) > 0 {
-		log.Fatal("Error: File size not supported. Exiting program.")
-	}
-
 	err = syncPasswordManagerUsersToMACFinUsers(f, input)
 	if err != nil {
 		log.Fatal(err)
