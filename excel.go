@@ -90,7 +90,12 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	// add new MACFin users to automatedSheet
 	for macFinUser, password := range macFinUsersToPasswords {
 		if _, ok := userToPasswordRow[macFinUser]; !ok {
-			values := []string{macFinUser, password, password, "Rotate Now"}
+			values := map[int]string{
+				input.AutomatedSheetColNameToIndex[ColUser]:      macFinUser,
+				input.AutomatedSheetColNameToIndex[ColPassword]:  password,
+				input.AutomatedSheetColNameToIndex[ColPrevious]:  password,
+				input.AutomatedSheetColNameToIndex[ColTimestamp]: "Rotate Now",
+			}
 			// write new row
 			for col := 0; col < numCols; col++ {
 				err := writeCell(f, automatedSheet, col, numRows, values[col])
