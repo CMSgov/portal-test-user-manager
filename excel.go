@@ -16,6 +16,13 @@ func toSheetCoord(coord int) int {
 	return coord + 1
 }
 
+func max(x, y int) int {
+	if x < y {
+		return y
+	}
+	return x
+}
+
 func getHeaderToXCoord(headerRow []string) map[string]int {
 	headerToXCoord := make(map[string]int, len(headerRow))
 	for i, cell := range headerRow {
@@ -38,8 +45,8 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 	rowOffset := input.RowOffset
 
 	for _, row := range rows[rowOffset:] {
-		// check if row is empty
-		if row == nil {
+		// check if row is empty or too short
+		if len(row) < max(usernameXCoord, passwordXCoord) {
 			continue
 		}
 		users[row[usernameXCoord]] = row[passwordXCoord]
@@ -199,7 +206,8 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 	rowOffset := input.RowOffset
 
 	for i, row := range rows[rowOffset:] {
-		if row == nil {
+		// check if row is empty or too short
+		if len(row) < max(userX, passwordX) {
 			continue
 		}
 		user := row[userX]
