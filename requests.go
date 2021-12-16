@@ -112,7 +112,6 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 	idmHostname := portal.IDMHostname
 
 	headers := map[string][]string{
-		"Host":                      {hostname},
 		"upgrade-insecure-requests": {"1"},
 		"sec-fetch-site":            {"none"},
 		"sec-fetch-mode":            {"navigate"},
@@ -127,7 +126,6 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 
 	// This request GETs the IDMSession Cookie.
 	headers = map[string][]string{
-		"Host":           {hostname},
 		"sec-fetch-site": {"same-origin"},
 		"sec-fetch-mode": {"cors"},
 		"sec-fetch-dest": {"empty"},
@@ -153,7 +151,6 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 	}
 
 	headers = map[string][]string{
-		"Host":           {hostname},
 		"sec-fetch-site": {"same-origin"},
 		"sec-fetch-mode": {"cors"},
 		"sec-fetch-dest": {"empty"},
@@ -179,7 +176,6 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 	params := fmt.Sprintf("token=%s&redirectUrl=%s%s%s", token, scheme, hostname, oauth2RedirectUrlPath)
 
 	headers = map[string][]string{
-		"Host":                      {idmHostname},
 		"upgrade-insecure-requests": {"1"},
 		"sec-fetch-site":            {"same-site"},
 		"sec-fetch-mode":            {"navigate"},
@@ -203,7 +199,6 @@ func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPas
 	idmHostname := portal.IDMHostname
 
 	headers := map[string][]string{
-		"Host":                       {idmHostname},
 		"x-okta-user-agent-extended": {"okta-auth-js-1.8.0"}, // brittle
 		"x-requested-with":           {"XMLHttpRequest"},
 		"sec-fetch-site":             {"same-site"},
@@ -236,7 +231,6 @@ func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPas
 
 	portalXsrfTokenCookie := getCookie(client, scheme+hostname, "PORTAL-XSRF-TOKEN")
 	headers = map[string][]string{
-		"Host":              {hostname},
 		"sec-fetch-site":    {"same-origin"},
 		"sec-fetch-mode":    {"cors"},
 		"sec-fetch-dest":    {"empty"},
