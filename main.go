@@ -113,14 +113,14 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 				continue
 			}
 			numSuccess++
-			// copy portal col password to previous col
+			// copy password to previous col
 			err = copyCell(f, automatedSheet, colPassword, i+rowOffset, colPrevious, i+rowOffset)
 			if err != nil {
 				return fmt.Errorf("failed to write previous password %s to sheet %s, row %d for user %s: %s",
 					row[colPassword], input.SheetName, i+rowOffset, name, err)
 			}
 
-			// Write new password to portal col
+			// write new password to password col
 			err := writeCell(f, automatedSheet, colPassword, i+rowOffset, newPassword)
 			if err != nil {
 				return fmt.Errorf("failed to write new password to sheet %s in row %d for user %s: %v; manually set password for user",
