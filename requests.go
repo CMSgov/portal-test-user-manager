@@ -106,7 +106,8 @@ func sendRequest(client *http.Client, method, urlstr string, customHeaders map[s
 }
 
 func loginStep(client *http.Client, portal *Portal, username, password string) error {
-	// GET login page at scheme+hostname+/portal/
+	// GET to loginPagePath returns 3 cookies for portal.cms.gov: dc, DC, akavpau_default
+	// The response body returns user info, which includes id.
 	hostname := portal.Hostname
 	idmHostname := portal.IDMHostname
 
@@ -123,7 +124,8 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 		return err
 	}
 
-	// This request GETs the IDMSession Cookie.
+	// GET to loginClearPath returns 4 cookies; IDMSession is new.
+	// cookie jar contains 4 cookies for portal.cms.gov: dc, DC, akavpau_default, IDMSession
 	headers = map[string][]string{
 		"sec-fetch-site": {"same-origin"},
 		"sec-fetch-mode": {"cors"},
@@ -137,7 +139,9 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 		return err
 	}
 
-	// POST  scheme+hostname+/portal/login to get sessionToken used for oauth2 token
+	// POST loginSubmitPath returns a sessionToken in the response body
+	// sessionToken is a query parameter in the GET to oauth2RedirectUrlPath
+	// Return no new cookies.
 	creds := loginDetails{
 		Username: username,
 		Password: password,
@@ -168,9 +172,11 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 		return errors.New("missing sessionToken in response body; user might be locked out of portal")
 	}
 
-	// Start the oauth2 process
-	// GET scheme+idmHostname+/login/sessionCookieRedirect?token=&redirectUrl=scheme+hostname+/myportal/
-	// get the sessionToken from the response body of the POST /portal/login request and use as oauth2 token
+	// Start the oauth2 process between client and server
+	// GET to oauth2RedirectUrlPath
+	// Response returns 12 cookies: 4 existing cookies and 8 new ones
+	// New cookies for portal.cms.gov: F5_ST, LastMRH_Session, MRHSession, PORTAL-XSRF-TOKEN
+	// New cookies for idm.cms.gov: t, DT, JSESSIONID, sid
 	token := userData.SessionToken
 	params := url.Values{}
 	params.Add("token", token)
@@ -198,8 +204,9 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 }
 
 func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPassword string) error {
-	// Get userID from response body of:
-	// GET https://idm.cms.gov/api/v1/sessions/me/lifecycle/refresh
+	// GET to userData
+	// Response body contains userID, used in header for POST changeUserPassword
+	// No new cookies returned.
 	hostname := portal.Hostname
 	idmHostname := portal.IDMHostname
 
@@ -223,7 +230,11 @@ func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPas
 		return errors.New("missing userId in response body")
 	}
 
-	// Change password: scheme+hostname+/myportal/viewprofile/myprofile/credential
+	// GET to changePasswordPath
+	// Request headers and cookie jar contains PORTAL-XSRF-TOKEN
+	// Request body contains credentials
+	// If request succeeds, then password is reset
+	// No new cookies added.
 	creds := changePassword{
 		OldPassword: oldPassword,
 		NewPassword: newPassword,
