@@ -46,7 +46,7 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 
 	for _, row := range rows[rowOffset:] {
 		// check if row is empty or too short
-		if len(row) < max(usernameXCoord, passwordXCoord) {
+		if len(row) <= max(usernameXCoord, passwordXCoord) {
 			continue
 		}
 		users[row[usernameXCoord]] = row[passwordXCoord]
@@ -92,7 +92,6 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	rowOffset := input.RowOffset
 	numRows := len(userToPasswordRow) + rowOffset
 	automatedSheet := input.AutomatedSheetName
-	numCols := len(input.AutomatedSheetColNameToIndex)
 
 	// add new MACFin users to automatedSheet
 	for macFinUser, password := range macFinUsersToPasswords {
@@ -104,8 +103,8 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 				input.AutomatedSheetColNameToIndex[ColTimestamp]: "Rotate Now",
 			}
 			// write new row
-			for col := 0; col < numCols; col++ {
-				err := writeCell(f, automatedSheet, col, numRows, values[col])
+			for name, idx := range input.AutomatedSheetColNameToIndex {
+				err := writeCell(f, automatedSheet, idx, numRows, values[int(name)])
 				if err != nil {
 					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", macFinUser, automatedSheet, input.Filename, err)
 				}
@@ -207,7 +206,7 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 
 	for i, row := range rows[rowOffset:] {
 		// check if row is empty or too short
-		if len(row) < max(userX, passwordX) {
+		if len(row) <= max(userX, passwordX) {
 			continue
 		}
 		user := row[userX]
