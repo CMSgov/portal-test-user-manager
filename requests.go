@@ -52,7 +52,7 @@ func getCookie(c *http.Client, urlstr, cookieName string) (*http.Cookie, error) 
 			return c, nil
 		}
 	}
-	return nil, err
+	return nil, fmt.Errorf("failed to find %s in cookie jar", cookieName)
 }
 
 func sendRequest(client *http.Client, method, urlstr string, customHeaders map[string][]string, body []byte, userData interface{}) error {
