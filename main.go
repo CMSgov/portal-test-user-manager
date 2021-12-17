@@ -62,8 +62,6 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 		return err
 	}
 
-	client := portalClient()
-
 	var now time.Time
 
 	numSuccess := 0
@@ -87,6 +85,9 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 	}
 
 	for i, row := range rows[rowOffset:] {
+		// delete all cookies
+		client := portalClient()
+
 		now = time.Now().UTC()
 		name := row[colUser]
 

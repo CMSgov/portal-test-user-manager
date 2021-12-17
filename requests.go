@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 )
 
@@ -276,16 +275,6 @@ func logoutStep(client *http.Client, portal *Portal) (err error) {
 	if err != nil {
 		return err
 	}
-
-	// Delete all cookies.
-	defer func() error {
-		newJar, cerr := cookiejar.New(nil)
-		if cerr != nil {
-			return fmt.Errorf("failed to delete cookies; logout failed: %v", cerr)
-		}
-		client.Jar = newJar
-		return err
-	}()
 
 	return nil
 }
