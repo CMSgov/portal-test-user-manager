@@ -181,11 +181,11 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 	params := url.Values{}
 	params.Add("token", token)
 	params.Add("redirectUrl", fmt.Sprintf("%s%s%s", scheme, hostname, oauth2RedirectUrlPath))
-	url, err := url.Parse(scheme + idmHostname + loginOauth2Path)
+	urlObj, err := url.Parse(scheme + idmHostname + loginOauth2Path)
 	if err != nil {
 		return err
 	}
-	url.RawQuery = params.Encode()
+	urlObj.RawQuery = params.Encode()
 	headers = map[string][]string{
 		"upgrade-insecure-requests": {"1"},
 		"sec-fetch-site":            {"same-site"},
@@ -195,7 +195,7 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 		"referer":                   {scheme + hostname},
 		"origin":                    {hostname},
 	}
-	err = sendRequest(client, http.MethodGet, url.String(), headers, nil, nil)
+	err = sendRequest(client, http.MethodGet, urlObj.String(), headers, nil, nil)
 	if err != nil {
 		return err
 	}
