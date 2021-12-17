@@ -172,8 +172,14 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 	// GET scheme+idmHostname+/login/sessionCookieRedirect?token=&redirectUrl=scheme+hostname+/myportal/
 	// get the sessionToken from the response body of the POST /portal/login request and use as oauth2 token
 	token := userData.SessionToken
-	params := fmt.Sprintf("token=%s&redirectUrl=%s%s%s", token, scheme, hostname, oauth2RedirectUrlPath)
-
+	params := url.Values{}
+	params.Add("token", token)
+	params.Add("redirectUrl", fmt.Sprintf("%s%s%s", scheme, hostname, oauth2RedirectUrlPath))
+	url, err := url.Parse(scheme + idmHostname + loginOauth2Path)
+	if err != nil {
+		return err
+	}
+	url.RawQuery = params.Encode()
 	headers = map[string][]string{
 		"upgrade-insecure-requests": {"1"},
 		"sec-fetch-site":            {"same-site"},
@@ -183,7 +189,7 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 		"referer":                   {scheme + hostname},
 		"origin":                    {hostname},
 	}
-	err = sendRequest(client, http.MethodGet, scheme+idmHostname+loginOauth2Path+params, headers, nil, nil)
+	err = sendRequest(client, http.MethodGet, url.String(), headers, nil, nil)
 	if err != nil {
 		return err
 	}
