@@ -18,10 +18,8 @@ const (
 	loginSubmitPath       = "/portal/login"
 	loginOauth2Path       = "/login/sessionCookieRedirect?"
 	oauth2RedirectUrlPath = "/myportal/"
-	userDataPath          = "/api/v1/sessions/me/lifecycle/refresh"
 	changePasswordPath    = "/myportal/viewprofile/myprofile/credential"
 	logoutPath            = "/myportal/logout"
-	userId                = "userId"
 	sessionToken          = "sessionToken"
 )
 
@@ -37,7 +35,6 @@ type changePassword struct {
 }
 
 type userData struct {
-	UserId       string `json:"userId"`
 	SessionToken string `json:"sessionToken"`
 }
 
@@ -107,7 +104,6 @@ func sendRequest(client *http.Client, method, urlstr string, customHeaders map[s
 
 func loginStep(client *http.Client, portal *Portal, username, password string) error {
 	// GET to loginPagePath returns 3 cookies for portal.cms.gov: dc, DC, akavpau_default
-	// The response body returns user info, which includes id.
 	hostname := portal.Hostname
 	idmHostname := portal.IDMHostname
 
@@ -208,27 +204,6 @@ func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPas
 	// Response body contains userID, used in header for POST changeUserPassword
 	// No new cookies returned.
 	hostname := portal.Hostname
-	idmHostname := portal.IDMHostname
-
-	headers := map[string][]string{
-		"x-okta-user-agent-extended": {"okta-auth-js-1.8.0"}, // brittle
-		"x-requested-with":           {"XMLHttpRequest"},
-		"sec-fetch-site":             {"same-site"},
-		"sec-fetch-mode":             {"cors"},
-		"sec-fetch-dest":             {"empty"},
-		"referer":                    {scheme + hostname + "/myportal/view-profile"},
-		"origin":                     {scheme + hostname},
-	}
-
-	userData := &userData{}
-	err := sendRequest(client, http.MethodPost, scheme+idmHostname+userDataPath, headers, nil, userData)
-	if err != nil {
-		return err
-	}
-
-	if userData.UserId == "" {
-		return errors.New("missing userId in response body")
-	}
 
 	// GET to changePasswordPath
 	// Request headers and cookie jar contains PORTAL-XSRF-TOKEN
@@ -249,7 +224,7 @@ func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPas
 	if err != nil {
 		return err
 	}
-	headers = map[string][]string{
+	headers := map[string][]string{
 		"sec-fetch-site":    {"same-origin"},
 		"sec-fetch-mode":    {"cors"},
 		"sec-fetch-dest":    {"empty"},
@@ -258,7 +233,6 @@ func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPas
 		"xhr_request":       {"true"},
 		"observe":           {"response"},
 		"portal-xsrf-token": {portalXsrfTokenCookie.Value},
-		"userid":            {userData.UserId},
 	}
 
 	err = sendRequest(client, http.MethodPost, scheme+hostname+changePasswordPath, headers, body, nil)
