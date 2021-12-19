@@ -107,22 +107,9 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 	hostname := portal.Hostname
 	idmHostname := portal.IDMHostname
 
-	headers := map[string][]string{
-		"upgrade-insecure-requests": {"1"},
-		"sec-fetch-site":            {"none"},
-		"sec-fetch-mode":            {"navigate"},
-		"sec-fetch-user":            {"?1"},
-		"sec-fetch-dest":            {"document"},
-	}
-
-	err := sendRequest(client, http.MethodGet, scheme+hostname+loginPagePath, headers, nil, nil)
-	if err != nil {
-		return err
-	}
-
 	// GET to loginClearPath returns 4 cookies; IDMSession is new.
 	// cookie jar contains 4 cookies for portal.cms.gov: dc, DC, akavpau_default, IDMSession
-	headers = map[string][]string{
+	headers := map[string][]string{
 		"sec-fetch-site": {"same-origin"},
 		"sec-fetch-mode": {"cors"},
 		"sec-fetch-dest": {"empty"},
@@ -130,7 +117,7 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 		"referer":        {scheme + hostname},
 	}
 
-	err = sendRequest(client, http.MethodGet, scheme+hostname+loginClearPath, headers, nil, nil)
+	err := sendRequest(client, http.MethodGet, scheme+hostname+loginClearPath, headers, nil, nil)
 	if err != nil {
 		return err
 	}
