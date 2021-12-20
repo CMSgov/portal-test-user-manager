@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -17,19 +18,25 @@ func toSheetCoord(coord int) int {
 	return coord + 1
 }
 
-func isValid(f *excelize.File, sheet string, rowNum, usernameXCoord, passwordXCoord int) (bool, error) {
+func validateRow(f *excelize.File, sheet string, rowNum, usernameXCoord, passwordXCoord int) error {
 	// check if username or password is empty
 	username, err := getCellValue(f, sheet, usernameXCoord, rowNum)
 	if err != nil {
-		return false, err
+		return err
+	}
+	if username == "" {
+		return errors.New("username is missing")
 	}
 	password, err := getCellValue(f, sheet, passwordXCoord, rowNum)
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	return username != "" && password != "", nil
+	if password == "" {
+		return errors.New("password is missing")
+	}
 
+	return nil
 }
 
 func getHeaderToXCoord(headerRow []string) map[string]int {
@@ -54,13 +61,9 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 	rowOffset := input.RowOffset
 
 	for i, row := range rows[rowOffset:] {
-		valid, err := isValid(f, input.SheetName, i+rowOffset, usernameXCoord, passwordXCoord)
+		err := validateRow(f, input.SheetName, i+rowOffset, usernameXCoord, passwordXCoord)
 		if err != nil {
-			log.Printf("error validating sheet %s row %d: %s", input.SheetName, toSheetCoord(i+rowOffset), err)
-			continue
-		}
-		if !valid {
-			log.Printf("sheet: %s invalid row %d; username or password is missing", input.SheetName, (i + rowOffset))
+			log.Printf("validating sheet %s, row %d: %s", input.SheetName, toSheetCoord(i+rowOffset), err)
 			continue
 		}
 
@@ -232,15 +235,12 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 	rowOffset := input.RowOffset
 
 	for i, row := range rows[rowOffset:] {
-		valid, err := isValid(f, input.SheetName, i+rowOffset, userX, passwordX)
+		err := validateRow(f, input.SheetName, i+rowOffset, userX, passwordX)
 		if err != nil {
-			log.Printf("error validating sheet %s row %d: %s", input.SheetName, toSheetCoord(i+rowOffset), err)
+			log.Printf("validating sheet %s, row %d: %s", input.SheetName, toSheetCoord(i+rowOffset), err)
 			continue
 		}
-		if !valid {
-			log.Printf("sheet: %s invalid row %d; username or password is missing", input.SheetName, (i + rowOffset))
-			continue
-		}
+
 		user := row[userX]
 		macPassword := row[passwordX]
 		if pwRow, ok := userToPasswordRow[user]; ok {
