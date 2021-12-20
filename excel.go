@@ -17,7 +17,7 @@ func toSheetCoord(coord int) int {
 	return coord + 1
 }
 
-func isValid(f *excelize.File, sheet string, cols []string, rowNum, usernameXCoord, passwordXCoord int) (bool, error) {
+func isValid(f *excelize.File, sheet string, rowNum, usernameXCoord, passwordXCoord int) (bool, error) {
 	// check if username or password is empty
 	username, err := getCellValue(f, sheet, usernameXCoord, rowNum)
 	if err != nil {
@@ -54,12 +54,13 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 	rowOffset := input.RowOffset
 
 	for i, row := range rows[rowOffset:] {
-		valid, err := isValid(f, input.SheetName, row, i+rowOffset, usernameXCoord, passwordXCoord)
+		valid, err := isValid(f, input.SheetName, i+rowOffset, usernameXCoord, passwordXCoord)
 		if err != nil {
-			log.Printf("error validating row %d: %s", toSheetCoord(i+rowOffset), err)
+			log.Printf("error validating sheet %s row %d: %s", input.SheetName, toSheetCoord(i+rowOffset), err)
 			continue
 		}
 		if !valid {
+			log.Printf("sheet: %s invalid row %d; username or password is missing", input.SheetName, (i + rowOffset))
 			continue
 		}
 
@@ -231,12 +232,13 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 	rowOffset := input.RowOffset
 
 	for i, row := range rows[rowOffset:] {
-		valid, err := isValid(f, input.SheetName, row, i+rowOffset, userX, passwordX)
+		valid, err := isValid(f, input.SheetName, i+rowOffset, userX, passwordX)
 		if err != nil {
-			log.Printf("error validating row %d: %s", toSheetCoord(i+rowOffset), err)
+			log.Printf("error validating sheet %s row %d: %s", input.SheetName, toSheetCoord(i+rowOffset), err)
 			continue
 		}
 		if !valid {
+			log.Printf("sheet: %s invalid row %d; username or password is missing", input.SheetName, (i + rowOffset))
 			continue
 		}
 		user := row[userX]

@@ -13,7 +13,6 @@ import (
 
 const (
 	scheme                = "https://"
-	loginPagePath         = "/portal/"
 	loginClearPath        = "/portal/selfservice/users/loginClear/"
 	loginSubmitPath       = "/portal/login"
 	loginOauth2Path       = "/login/sessionCookieRedirect?"
