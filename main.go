@@ -48,7 +48,7 @@ type Creds struct {
 func portalClient() *http.Client {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
-		log.Fatal("error creating cookiejar")
+		log.Fatal("Error creating cookiejar")
 	}
 	return &http.Client{
 		Jar: jar,
@@ -97,7 +97,7 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 		} else {
 			lastRotated, err = time.Parse(time.UnixDate, row[colTimestamp])
 			if err != nil {
-				return fmt.Errorf("error parsing timestamp from row %d for user %s: %s", i+rowOffset, name, err)
+				return fmt.Errorf("Error parsing timestamp from row %d for user %s: %s", i+rowOffset, name, err)
 			}
 		}
 

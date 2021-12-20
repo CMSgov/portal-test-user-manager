@@ -63,7 +63,7 @@ func sendRequest(client *http.Client, method, urlstr string, customHeaders map[s
 	}
 
 	if err != nil {
-		return err
+		return fmt.Errorf("Error creating request: %s", err)
 	}
 
 	if len(body) > 0 {
@@ -78,7 +78,7 @@ func sendRequest(client *http.Client, method, urlstr string, customHeaders map[s
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error sending request: %s", err)
 	}
 
 	defer resp.Body.Close()
@@ -94,7 +94,7 @@ func sendRequest(client *http.Client, method, urlstr string, customHeaders map[s
 	if userData != nil {
 		err = json.NewDecoder(resp.Body).Decode(userData)
 		if err != nil {
-			return err
+			return fmt.Errorf("Error decoding response body: %s", err)
 		}
 	}
 
@@ -118,7 +118,7 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 
 	err := sendRequest(client, http.MethodGet, scheme+hostname+loginClearPath, headers, nil, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error sending request: %s", err)
 	}
 
 	// POST loginSubmitPath returns a sessionToken in the response body
@@ -132,7 +132,7 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 
 	body, err := json.Marshal(creds)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error marshalling creds: %s", err)
 	}
 
 	headers = map[string][]string{
@@ -147,11 +147,11 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 	userData := &userData{}
 	err = sendRequest(client, http.MethodPost, scheme+hostname+loginSubmitPath, headers, body, userData)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error sending request: %s", err)
 	}
 
 	if userData.SessionToken == "" {
-		return errors.New("missing sessionToken in response body; user might be locked out of portal")
+		return fmt.Errorf("Error no session token: %s", errors.New("missing sessionToken in response body; user might be locked out of portal"))
 	}
 
 	// Start the oauth2 process between client and server
@@ -165,7 +165,7 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 	params.Add("redirectUrl", fmt.Sprintf("%s%s%s", scheme, hostname, oauth2RedirectUrlPath))
 	urlObj, err := url.Parse(scheme + idmHostname + loginOauth2Path)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error logging in: %s", err)
 	}
 	urlObj.RawQuery = params.Encode()
 	headers = map[string][]string{
@@ -179,7 +179,7 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 	}
 	err = sendRequest(client, http.MethodGet, urlObj.String(), headers, nil, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error sending request: %s", err)
 	}
 
 	return nil
@@ -200,12 +200,12 @@ func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPas
 
 	body, err := json.Marshal(creds)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error marshalling creds: %s", err)
 	}
 
 	portalXsrfTokenCookie, err := getCookie(client, scheme+hostname, "PORTAL-XSRF-TOKEN")
 	if err != nil {
-		return err
+		return fmt.Errorf("Error getting cookie from jar: %s", err)
 	}
 	headers := map[string][]string{
 		"sec-fetch-site":    {"same-origin"},
@@ -220,7 +220,7 @@ func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPas
 
 	err = sendRequest(client, http.MethodPost, scheme+hostname+changePasswordPath, headers, body, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error sending request: %s", err)
 	}
 	return nil
 }
@@ -228,17 +228,17 @@ func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPas
 func changeUserPassword(client *http.Client, portal *Portal, username, oldPassword, newPassword string) error {
 	err := loginStep(client, portal, username, oldPassword)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error logging in: %s", err)
 	}
 
 	err = changePasswordStep(client, portal, oldPassword, newPassword)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error changing password: %s", err)
 	}
 
 	err = logoutStep(client, portal)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error logging out: %s", err)
 	}
 	return nil
 }
@@ -247,7 +247,7 @@ func logoutStep(client *http.Client, portal *Portal) (err error) {
 	hostname := portal.Hostname
 	err = sendRequest(client, http.MethodGet, scheme+hostname+logoutPath, nil, nil, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error sending request: %s", err)
 	}
 
 	return nil

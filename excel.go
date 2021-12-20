@@ -247,7 +247,7 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 			if pwRow.Password != macPassword {
 				err := writeCell(f, input.SheetName, passwordX, i+rowOffset, pwRow.Password)
 				if err != nil {
-					return fmt.Errorf("error setting new password for user %s in sheet %s in row %d: %s", user, input.SheetName, toSheetCoord(i+rowOffset), err)
+					return fmt.Errorf("Error setting new password for user %s in sheet %s in row %d: %s", user, input.SheetName, toSheetCoord(i+rowOffset), err)
 				}
 				numPasswordsUpdated++
 			}
