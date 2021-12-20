@@ -103,12 +103,12 @@ func sendRequest(client *http.Client, method, urlstr string, customHeaders map[s
 }
 
 func loginStep(client *http.Client, portal *Portal, username, password string) error {
-	// GET to loginPagePath returns 3 cookies for portal.cms.gov: dc, DC, akavpau_default
 	hostname := portal.Hostname
 	idmHostname := portal.IDMHostname
 
-	// GET to loginClearPath returns 4 cookies; IDMSession is new.
-	// cookie jar contains 4 cookies for portal.cms.gov: dc, DC, akavpau_default, IDMSession
+	// GET loginClearPath adds 4 cookies to the jar:
+	// portal.cms.gov: dc, DC, akavpau_default, IDMSession
+	// Note: portaldev.cms.gov does not return the DC cookie
 	headers := map[string][]string{
 		"sec-fetch-site": {"same-origin"},
 		"sec-fetch-mode": {"cors"},
@@ -124,7 +124,7 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 
 	// POST loginSubmitPath returns a sessionToken in the response body
 	// sessionToken is a query parameter in the GET to oauth2RedirectUrlPath
-	// Return no new cookies.
+	// Returns no new cookies.
 	creds := loginDetails{
 		Username: username,
 		Password: password,
@@ -187,13 +187,10 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 }
 
 func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPassword string) error {
-	// GET to userData
-	// Response body contains userID, used in header for POST changeUserPassword
-	// No new cookies returned.
 	hostname := portal.Hostname
 
-	// GET to changePasswordPath
-	// Request headers and cookie jar contains PORTAL-XSRF-TOKEN
+	// POST to changePasswordPath
+	// Request headers and cookie jar contain PORTAL-XSRF-TOKEN
 	// Request body contains credentials
 	// If request succeeds, then password is reset
 	// No new cookies added.
