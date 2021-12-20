@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"sort"
 
 	"github.com/xuri/excelize/v2"
@@ -16,11 +17,19 @@ func toSheetCoord(coord int) int {
 	return coord + 1
 }
 
-func max(x, y int) int {
-	if x < y {
-		return y
+func isValid(f *excelize.File, sheet string, cols []string, rowNum, usernameXCoord, passwordXCoord int) (bool, error) {
+	// check if username or password is empty
+	username, err := getCellValue(f, sheet, usernameXCoord, rowNum)
+	if err != nil {
+		return false, err
 	}
-	return x
+	password, err := getCellValue(f, sheet, passwordXCoord, rowNum)
+	if err != nil {
+		return false, err
+	}
+
+	return username != "" && password != "", nil
+
 }
 
 func getHeaderToXCoord(headerRow []string) map[string]int {
@@ -44,11 +53,16 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 	passwordXCoord := headerToXCoord[input.PasswordHeader]
 	rowOffset := input.RowOffset
 
-	for _, row := range rows[rowOffset:] {
-		// check if row is empty or too short
-		if len(row) <= max(usernameXCoord, passwordXCoord) {
+	for i, row := range rows[rowOffset:] {
+		valid, err := isValid(f, input.SheetName, row, i+rowOffset, usernameXCoord, passwordXCoord)
+		if err != nil {
+			log.Printf("error validating row %d: %s", toSheetCoord(i+rowOffset), err)
 			continue
 		}
+		if !valid {
+			continue
+		}
+
 		users[row[usernameXCoord]] = row[passwordXCoord]
 	}
 
@@ -160,6 +174,18 @@ func writeCell(f *excelize.File, sheet string, xCoord, yCoord int, value string)
 	return nil
 }
 
+func getCellValue(f *excelize.File, sheet string, xCoord, yCoord int) (string, error) {
+	cellName, err := excelize.CoordinatesToCellName(toSheetCoord(xCoord), toSheetCoord(yCoord))
+	if err != nil {
+		return "", err
+	}
+	value, err := f.GetCellValue(sheet, cellName)
+	if err != nil {
+		return "", err
+	}
+	return value, nil
+}
+
 // Copy cell in automatedSheet
 func copyCell(f *excelize.File, automatedSheetName string, srcX, srcY, destX, destY int) error {
 	srcCell, err := excelize.CoordinatesToCellName(toSheetCoord(srcX), toSheetCoord(srcY))
@@ -186,7 +212,7 @@ func copyCell(f *excelize.File, automatedSheetName string, srcX, srcY, destX, de
 	return nil
 }
 
-// Write new password to password column in the testing sheet
+// Write new password to password column in the MACFin sheet
 func updateMACFinUsers(f *excelize.File, input *Input) error {
 	userToPasswordRow, err := getManagedUsers(f, input)
 	if err != nil {
@@ -205,8 +231,12 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 	rowOffset := input.RowOffset
 
 	for i, row := range rows[rowOffset:] {
-		// check if row is empty or too short
-		if len(row) <= max(userX, passwordX) {
+		valid, err := isValid(f, input.SheetName, row, i+rowOffset, userX, passwordX)
+		if err != nil {
+			log.Printf("error validating row %d: %s", toSheetCoord(i+rowOffset), err)
+			continue
+		}
+		if !valid {
 			continue
 		}
 		user := row[userX]
