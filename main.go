@@ -172,10 +172,10 @@ func rotate(input *Input, portal *Portal) error {
 		return err
 	}
 
-	err = updateMACFinUsers(f, input)
-	if err != nil {
-		return err
-	}
+	// err = updateMACFinUsers(f, input)
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
