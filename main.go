@@ -38,6 +38,7 @@ type Input struct {
 type Portal struct {
 	Hostname    string
 	IDMHostname string // identity management hostname
+	Scheme      string
 }
 
 type Creds struct {
@@ -145,6 +146,40 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 	return nil
 }
 
+func rotate(input *Input, portal *Portal) error {
+	f, err := excelize.OpenFile(input.Filename)
+	if err != nil {
+		return err
+	}
+
+	// true means "block action"
+	err = f.ProtectSheet(input.AutomatedSheetName, &excelize.FormatSheetProtection{
+		Password:            input.AutomatedSheetPassword,
+		SelectLockedCells:   true,
+		SelectUnlockedCells: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to protect %s sheet", input.AutomatedSheetName)
+	}
+
+	err = syncPasswordManagerUsersToMACFinUsers(f, input)
+	if err != nil {
+		return err
+	}
+
+	err = resetPasswords(f, input, portal)
+	if err != nil {
+		return err
+	}
+
+	err = updateMACFinUsers(f, input)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
@@ -163,34 +198,10 @@ func main() {
 	portal := &Portal{
 		Hostname:    os.Getenv("PORTALHOSTNAME"),
 		IDMHostname: os.Getenv("IDMHOSTNAME"),
+		Scheme:      "https://",
 	}
 
-	f, err := excelize.OpenFile(input.Filename)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// true means "block action"
-	err = f.ProtectSheet(input.AutomatedSheetName, &excelize.FormatSheetProtection{
-		Password:            input.AutomatedSheetPassword,
-		SelectLockedCells:   true,
-		SelectUnlockedCells: true,
-	})
-	if err != nil {
-		log.Fatalf("failed to protect %s sheet", input.AutomatedSheetName)
-	}
-
-	err = syncPasswordManagerUsersToMACFinUsers(f, input)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = resetPasswords(f, input, portal)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = updateMACFinUsers(f, input)
+	err := rotate(input, portal)
 	if err != nil {
 		log.Fatal(err)
 	}

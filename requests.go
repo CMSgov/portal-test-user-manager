@@ -12,10 +12,9 @@ import (
 )
 
 const (
-	scheme                = "https://"
 	loginClearPath        = "/portal/selfservice/users/loginClear/"
 	loginSubmitPath       = "/portal/login"
-	loginOauth2Path       = "/login/sessionCookieRedirect?"
+	loginOauth2Path       = "/login/sessionCookieRedirect"
 	oauth2RedirectUrlPath = "/myportal/"
 	changePasswordPath    = "/myportal/viewprofile/myprofile/credential"
 	logoutPath            = "/myportal/logout"
@@ -113,10 +112,10 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 		"sec-fetch-mode": {"cors"},
 		"sec-fetch-dest": {"empty"},
 		"pragma":         {"no-cache"},
-		"referer":        {scheme + hostname},
+		"referer":        {portal.Scheme + hostname},
 	}
 
-	err := sendRequest(client, http.MethodGet, scheme+hostname+loginClearPath, headers, nil, nil)
+	err := sendRequest(client, http.MethodGet, portal.Scheme+hostname+loginClearPath, headers, nil, nil)
 	if err != nil {
 		return fmt.Errorf("Error sending request: %s", err)
 	}
@@ -140,12 +139,12 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 		"sec-fetch-mode": {"cors"},
 		"sec-fetch-dest": {"empty"},
 		"pragma":         {"no-cache"},
-		"referer":        {scheme + hostname + "/portal/"},
+		"referer":        {portal.Scheme + hostname + "/portal/"},
 		"origin":         {hostname},
 	}
 
 	userData := &userData{}
-	err = sendRequest(client, http.MethodPost, scheme+hostname+loginSubmitPath, headers, body, userData)
+	err = sendRequest(client, http.MethodPost, portal.Scheme+hostname+loginSubmitPath, headers, body, userData)
 	if err != nil {
 		return fmt.Errorf("Error sending request: %s", err)
 	}
@@ -162,8 +161,8 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 	token := userData.SessionToken
 	params := url.Values{}
 	params.Add("token", token)
-	params.Add("redirectUrl", fmt.Sprintf("%s%s%s", scheme, hostname, oauth2RedirectUrlPath))
-	urlObj, err := url.Parse(scheme + idmHostname + loginOauth2Path)
+	params.Add("redirectUrl", fmt.Sprintf("%s%s%s", portal.Scheme, hostname, oauth2RedirectUrlPath))
+	urlObj, err := url.Parse(portal.Scheme + idmHostname + loginOauth2Path)
 	if err != nil {
 		return fmt.Errorf("Error logging in: %s", err)
 	}
@@ -174,7 +173,7 @@ func loginStep(client *http.Client, portal *Portal, username, password string) e
 		"sec-fetch-mode":            {"navigate"},
 		"sec-fetch-dest":            {"document"},
 		"sec-fetch-user":            {"?1"},
-		"referer":                   {scheme + hostname},
+		"referer":                   {portal.Scheme + hostname},
 		"origin":                    {hostname},
 	}
 	err = sendRequest(client, http.MethodGet, urlObj.String(), headers, nil, nil)
@@ -203,7 +202,7 @@ func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPas
 		return fmt.Errorf("Error marshalling creds: %s", err)
 	}
 
-	portalXsrfTokenCookie, err := getCookie(client, scheme+hostname, "PORTAL-XSRF-TOKEN")
+	portalXsrfTokenCookie, err := getCookie(client, portal.Scheme+hostname, "PORTAL-XSRF-TOKEN")
 	if err != nil {
 		return fmt.Errorf("Error getting cookie from jar: %s", err)
 	}
@@ -211,14 +210,14 @@ func changePasswordStep(client *http.Client, portal *Portal, oldPassword, newPas
 		"sec-fetch-site":    {"same-origin"},
 		"sec-fetch-mode":    {"cors"},
 		"sec-fetch-dest":    {"empty"},
-		"referer":           {scheme + hostname + "/myportal/view-profile"},
-		"origin":            {scheme + hostname},
+		"referer":           {portal.Scheme + hostname + "/myportal/view-profile"},
+		"origin":            {portal.Scheme + hostname},
 		"xhr_request":       {"true"},
 		"observe":           {"response"},
 		"portal-xsrf-token": {portalXsrfTokenCookie.Value},
 	}
 
-	err = sendRequest(client, http.MethodPost, scheme+hostname+changePasswordPath, headers, body, nil)
+	err = sendRequest(client, http.MethodPost, portal.Scheme+hostname+changePasswordPath, headers, body, nil)
 	if err != nil {
 		return fmt.Errorf("Error sending request: %s", err)
 	}
@@ -245,7 +244,7 @@ func changeUserPassword(client *http.Client, portal *Portal, username, oldPasswo
 
 func logoutStep(client *http.Client, portal *Portal) (err error) {
 	hostname := portal.Hostname
-	err = sendRequest(client, http.MethodGet, scheme+hostname+logoutPath, nil, nil, nil)
+	err = sendRequest(client, http.MethodGet, portal.Scheme+hostname+logoutPath, nil, nil, nil)
 	if err != nil {
 		return fmt.Errorf("Error sending request: %s", err)
 	}
