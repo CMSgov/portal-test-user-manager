@@ -75,13 +75,13 @@ type AuthServer struct {
 	UserToNewPassword map[string]string
 	Errors            map[string]string // user -> path
 	PortalSessions    map[string]*session
-	IMDSessions       map[string]*session
+	IDMSessions       map[string]*session
 }
 
 func (s *AuthServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.PortalSessions == nil {
 		s.PortalSessions = make(map[string]*session)
-		s.IMDSessions = make(map[string]*session)
+		s.IDMSessions = make(map[string]*session)
 		if s.Errors == nil {
 			s.Errors = make(map[string]string)
 		}
@@ -107,7 +107,7 @@ func (s *AuthServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			sessionID := fmt.Sprintf("%x", rand.Int())
-			s.IMDSessions[sessionID] = sess
+			s.IDMSessions[sessionID] = sess
 			w.Header().Set("Set-Cookie", idmSessionCookieName+"="+sessionID+"; Path=/")
 			http.Redirect(w, r, "http://"+portalServer+xsrfRedirectPath, http.StatusFound)
 		} else {
@@ -518,7 +518,7 @@ func TestRotate(t *testing.T) {
 				t.Fatalf("Error making temp dir: %s", err)
 			}
 			log.Printf("Created %s", dir)
-			// defer os.RemoveAll(dir)
+			defer os.RemoveAll(dir)
 			filename := path.Join(dir, "in.xlsx")
 			f := excelize.NewFile()
 
@@ -700,7 +700,7 @@ func TestRotate(t *testing.T) {
 					t.Fatalf("Session %#v is still logged in", sess)
 				}
 			}
-			for _, sess := range handler.IMDSessions {
+			for _, sess := range handler.IDMSessions {
 				if tc.ServerErrors[sess.username] != "" {
 					// When there is an error, we don't log out.
 					continue
