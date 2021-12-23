@@ -47,13 +47,17 @@ func getHeaderToXCoord(headerRow []string) map[string]int {
 	return headerToXCoord
 }
 
-func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
+type usernameAndPassword struct {
+	Username, Password string
+}
+
+func getMACFinUsers(f *excelize.File, input *Input) ([]usernameAndPassword, error) {
 	rows, err := f.GetRows(input.SheetName)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", input.SheetName, input.Filename, err)
 	}
 
-	users := make(map[string]string)
+	users := []usernameAndPassword{}
 
 	headerToXCoord := getHeaderToXCoord(rows[0])
 	usernameXCoord := headerToXCoord[input.UsernameHeader]
@@ -66,8 +70,7 @@ func getMACFinUsers(f *excelize.File, input *Input) (map[string]string, error) {
 			log.Printf("validating sheet %s, row %d: %s", input.SheetName, toSheetCoord(i+rowOffset), err)
 			continue
 		}
-
-		users[row[usernameXCoord]] = row[passwordXCoord]
+		users = append(users, usernameAndPassword{row[usernameXCoord], row[passwordXCoord]})
 	}
 
 	return users, nil
@@ -111,20 +114,25 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	numRows := len(userToPasswordRow) + rowOffset
 	automatedSheet := input.AutomatedSheetName
 
+	usersFound := map[string]struct{}{}
 	// add new MACFin users to automatedSheet
-	for macFinUser, password := range macFinUsersToPasswords {
-		if _, ok := userToPasswordRow[macFinUser]; !ok {
+	for _, up := range macFinUsersToPasswords {
+		if _, ok := usersFound[up.Username]; ok {
+			continue
+		}
+		usersFound[up.Username] = struct{}{}
+		if _, ok := userToPasswordRow[up.Username]; !ok {
 			values := map[int]string{
-				input.AutomatedSheetColNameToIndex[ColUser]:      macFinUser,
-				input.AutomatedSheetColNameToIndex[ColPassword]:  password,
-				input.AutomatedSheetColNameToIndex[ColPrevious]:  password,
+				input.AutomatedSheetColNameToIndex[ColUser]:      up.Username,
+				input.AutomatedSheetColNameToIndex[ColPassword]:  up.Password,
+				input.AutomatedSheetColNameToIndex[ColPrevious]:  up.Password,
 				input.AutomatedSheetColNameToIndex[ColTimestamp]: "Rotate Now",
 			}
 			// write new row
 			for name, idx := range input.AutomatedSheetColNameToIndex {
 				err := writeCell(f, automatedSheet, idx, numRows, values[int(name)])
 				if err != nil {
-					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", macFinUser, automatedSheet, input.Filename, err)
+					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", up.Username, automatedSheet, input.Filename, err)
 				}
 			}
 			numRows++
@@ -135,7 +143,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	// get rows for deletion from automatedSheet
 	rowsToDelete := []int{}
 	for pwUser, pwRow := range userToPasswordRow {
-		if _, ok := macFinUsersToPasswords[pwUser]; !ok {
+		if _, ok := usersFound[pwUser]; !ok {
 			// pwUser is not in MACFin users; mark row for deletion from automatedSheet
 			rowsToDelete = append(rowsToDelete, pwRow.Row)
 			continue
