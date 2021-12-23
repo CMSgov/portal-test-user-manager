@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"os"
+	"path"
 	"time"
 
 	"github.com/xuri/excelize/v2"
@@ -146,11 +147,12 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 	return nil
 }
 
-func rotate(input *Input, portal *Portal) error {
-	f, err := excelize.OpenFile(input.Filename)
+func rotate(input *Input, portal *Portal, client S3ClientAPI) error {
+	f, err := downloadFile(input, client)
 	if err != nil {
 		return err
 	}
+	defer os.RemoveAll(path.Dir(f.Path))
 
 	// true means "block action"
 	err = f.ProtectSheet(input.AutomatedSheetName, &excelize.FormatSheetProtection{
@@ -177,6 +179,11 @@ func rotate(input *Input, portal *Portal) error {
 		return err
 	}
 
+	err = uploadFile(f, input, client)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return nil
 }
 
@@ -201,7 +208,12 @@ func main() {
 		Scheme:      "https://",
 	}
 
-	err := rotate(input, portal)
+	client, err := createS3Client(region)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = rotate(input, portal, client)
 	if err != nil {
 		log.Fatal(err)
 	}

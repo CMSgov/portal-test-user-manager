@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -13,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -512,6 +517,74 @@ var testCases = []TestCase{
 	},
 }
 
+type FakeS3Client struct {
+	Get mockGetObjectAPI
+	Put mockPutObjectAPI
+}
+
+type mockGetObjectAPI func(ctx context.Context, params *s3.GetObjectInput) (*s3.GetObjectOutput, error)
+type mockPutObjectAPI func(ctx context.Context, params *s3.PutObjectInput) (*s3.PutObjectOutput, error)
+
+func (fc *FakeS3Client) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	return fc.Get(ctx, params)
+}
+
+func (fc *FakeS3Client) PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	return fc.Put(ctx, params)
+}
+
+func (fc *FakeS3Client) New(filename string) *FakeS3Client {
+	return &FakeS3Client{
+		Get: mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput) (*s3.GetObjectOutput, error) {
+			bucket := params.Bucket
+			if bucket == nil {
+				return nil, errors.New("bucket is nil")
+			}
+			key := params.Key
+			if key == nil {
+				return nil, errors.New("key is nil")
+			}
+			f, err := excelize.OpenFile(filename)
+			if err != nil {
+				return nil, fmt.Errorf("Error downloading s3 object: %s", err)
+			}
+			buff, err := f.WriteToBuffer()
+			if err != nil {
+				return nil, fmt.Errorf("Error downloading S3 object: %s", err)
+			}
+			b := buff.Bytes()
+			log.Printf("successfully downloaded %s (%d bytes) from s3", filename, len(b))
+			return &s3.GetObjectOutput{
+				Body: io.NopCloser(bytes.NewReader(b)),
+			}, nil
+		}),
+		Put: mockPutObjectAPI(func(ctx context.Context, params *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
+			bucket := params.Bucket
+			if bucket == nil {
+				return nil, errors.New("bucket is nil")
+			}
+			key := params.Key
+			if key == nil {
+				return nil, errors.New("key is nil")
+			}
+			body := params.Body
+			contents, err := io.ReadAll(body)
+			if err != nil {
+				return nil, fmt.Errorf("Error uploading file %s: %s", filename, err)
+			}
+
+			filename := path.Join("/", aws.StringValue(key))
+			err = os.WriteFile(filename, contents, 0666)
+			if err != nil {
+				return nil, fmt.Errorf("cannot open %s: %s", filename, err)
+			}
+
+			log.Printf("opened %s (%d bytes) for upload to s3://%s/%s", filename, len(contents), *bucket, *key)
+			return nil, nil
+		}),
+	}
+}
+
 func TestRotate(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -586,7 +659,7 @@ func TestRotate(t *testing.T) {
 				SheetName:              sheetNameMACFin,
 				UsernameHeader:         headingMACFinUsername,
 				PasswordHeader:         headinggMACFinPassword,
-				Filename:               filename,
+				Filename:               path.Join("s3://", filename),
 				AutomatedSheetPassword: "asfas",
 				AutomatedSheetName:     "PasswordManager",
 				AutomatedSheetColNameToIndex: map[Column]int{
@@ -600,7 +673,9 @@ func TestRotate(t *testing.T) {
 				Scheme:      "http://",
 			}
 
-			err = rotate(input, portal)
+			var fc FakeS3Client
+
+			err = rotate(input, portal, fc.New(filename))
 			if err != nil {
 				t.Fatalf("Error running rotate(): %s", err)
 			}
