@@ -12,6 +12,7 @@ import (
 )
 
 type Column int
+type Environment int
 
 const (
 	ColUser Column = iota
@@ -24,21 +25,31 @@ const (
 	maxPasswordAgeDays int = 30
 )
 
+const (
+	dev Environment = iota
+	val
+	prod
+)
+
 type Input struct {
 	Filename                     string
-	SheetName                    string
 	UsernameHeader               string
 	PasswordHeader               string
 	AutomatedSheetPassword       string
-	AutomatedSheetName           string // sheet managed by application
 	AutomatedSheetColNameToIndex map[Column]int
 	RowOffset                    int // number of header rows (common to all sheets)
+	SheetGroups                  map[Environment]SheetGroup
 }
 
 type Portal struct {
 	Hostname    string
 	IDMHostname string // identity management hostname
 	Scheme      string
+}
+
+type SheetGroup struct {
+	AutomatedSheetName string // sheet managed by application
+	SheetName          string
 }
 
 type Creds struct {
@@ -56,8 +67,8 @@ func portalClient() *http.Client {
 	}
 }
 
-func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) {
-	automatedSheet := input.AutomatedSheetName
+func resetPasswords(f *excelize.File, input *Input, portal *Portal, env Environment) (err error) {
+	automatedSheet := input.SheetGroups[env].AutomatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
 		return err
@@ -73,6 +84,7 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 	colPassword := input.AutomatedSheetColNameToIndex[ColPassword]
 	colPrevious := input.AutomatedSheetColNameToIndex[ColPrevious]
 	colTimestamp := input.AutomatedSheetColNameToIndex[ColTimestamp]
+	sheetName := input.SheetGroups[env].SheetName
 
 	var lastRotated time.Time
 
@@ -119,62 +131,65 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal) (err error) 
 			err = copyCell(f, automatedSheet, colPassword, i+rowOffset, colPrevious, i+rowOffset)
 			if err != nil {
 				return fmt.Errorf("failed to write previous password %s to sheet %s, row %d for user %s: %s",
-					row[colPassword], input.SheetName, i+rowOffset, name, err)
+					row[colPassword], sheetName, i+rowOffset, name, err)
 			}
 
 			// write new password to password col
 			err := writeCell(f, automatedSheet, colPassword, i+rowOffset, newPassword)
 			if err != nil {
 				return fmt.Errorf("failed to write new password to sheet %s in row %d for user %s: %v; manually set password for user",
-					input.SheetName, toSheetCoord(i+rowOffset), name, err)
+					sheetName, toSheetCoord(i+rowOffset), name, err)
 			}
 			// set timestamp
 			ts := now.Format(time.UnixDate)
 			err = writeCell(f, automatedSheet, colTimestamp, i+rowOffset, ts)
 			if err != nil {
 				return fmt.Errorf("failed to write timestamp %s to sheet %s in row %d for user %s: %s", ts,
-					input.SheetName, toSheetCoord(i+rowOffset), name, err)
+					sheetName, toSheetCoord(i+rowOffset), name, err)
 			}
 
 			log.Printf("%s: rotation complete", row[colUser])
 		}
 	}
 
-	log.Printf("total rotations: %d success: %d  fail: %d  not rotated: %d total users: %d",
-		numSuccess+numFail, numSuccess, numFail, numNoRotation, len(rows)-1)
+	log.Printf("total rotations in %s: %d success: %d  fail: %d  not rotated: %d total users: %d",
+		sheetName, numSuccess+numFail, numSuccess, numFail, numNoRotation, len(rows)-1)
 
 	return nil
 }
 
-func rotate(input *Input, portal *Portal) error {
+func rotate(input *Input, envToPortal map[Environment]*Portal) error {
 	f, err := excelize.OpenFile(input.Filename)
 	if err != nil {
 		return err
 	}
 
-	// true means "block action"
-	err = f.ProtectSheet(input.AutomatedSheetName, &excelize.FormatSheetProtection{
-		Password:            input.AutomatedSheetPassword,
-		SelectLockedCells:   true,
-		SelectUnlockedCells: true,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to protect %s sheet", input.AutomatedSheetName)
-	}
+	for env, portal := range envToPortal {
 
-	err = syncPasswordManagerUsersToMACFinUsers(f, input)
-	if err != nil {
-		return err
-	}
+		// true means "block action"
+		err = f.ProtectSheet(input.SheetGroups[env].AutomatedSheetName, &excelize.FormatSheetProtection{
+			Password:            input.AutomatedSheetPassword,
+			SelectLockedCells:   true,
+			SelectUnlockedCells: true,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to protect %s sheet", input.SheetGroups[env].AutomatedSheetName)
+		}
 
-	err = resetPasswords(f, input, portal)
-	if err != nil {
-		return err
-	}
+		err = syncPasswordManagerUsersToMACFinUsers(f, input, env)
+		if err != nil {
+			return err
+		}
 
-	err = updateMACFinUsers(f, input)
-	if err != nil {
-		return err
+		err = resetPasswords(f, input, portal, env)
+		if err != nil {
+			return err
+		}
+
+		err = updateMACFinUsers(f, input, env)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -183,25 +198,49 @@ func rotate(input *Input, portal *Portal) error {
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
+	envToPortal := map[Environment]*Portal{
+		dev: {
+			Hostname:    os.Getenv("PORTALHOSTNAMEDEV"),
+			IDMHostname: os.Getenv("IDMHOSTNAMEDEV"),
+			Scheme:      "https://",
+		},
+		val: {
+			Hostname:    os.Getenv("PORTALHOSTNAMEVAL"),
+			IDMHostname: os.Getenv("IDMHOSTNAMEVAL"),
+			Scheme:      "https://",
+		},
+		prod: {
+			Hostname:    os.Getenv("PORTALHOSTNAMEPROD"),
+			IDMHostname: os.Getenv("IDMHOSTNAMEPROD"),
+			Scheme:      "https://",
+		},
+	}
+
 	input := &Input{
-		SheetName:              os.Getenv("MACFINSHEETNAME"),
 		UsernameHeader:         os.Getenv("USERNAMEHEADER"),
 		PasswordHeader:         os.Getenv("PASSWORDHEADER"),
 		Filename:               os.Getenv("FILENAME"),
 		AutomatedSheetPassword: os.Getenv("AUTOMATEDSHEETPASSWORD"),
-		AutomatedSheetName:     "PasswordManager",
 		AutomatedSheetColNameToIndex: map[Column]int{
 			ColUser: 0, ColPassword: 1, ColPrevious: 2, ColTimestamp: 3},
 		RowOffset: 1,
+		SheetGroups: map[Environment]SheetGroup{
+			dev: {
+				AutomatedSheetName: "PasswordManager-DEV",
+				SheetName:          os.Getenv("MACFINSHEETNAMEDEV"),
+			},
+			val: {
+				AutomatedSheetName: "PasswordManager-VAL",
+				SheetName:          os.Getenv("MACFINSHEETNAMEVAL"),
+			},
+			prod: {
+				AutomatedSheetName: "PasswordManager-PROD",
+				SheetName:          os.Getenv("MACFINSHEETNAMEPROD"),
+			},
+		},
 	}
 
-	portal := &Portal{
-		Hostname:    os.Getenv("PORTALHOSTNAME"),
-		IDMHostname: os.Getenv("IDMHOSTNAME"),
-		Scheme:      "https://",
-	}
-
-	err := rotate(input, portal)
+	err := rotate(input, envToPortal)
 	if err != nil {
 		log.Fatal(err)
 	}

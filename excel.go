@@ -51,10 +51,11 @@ type usernameAndPassword struct {
 	Username, Password string
 }
 
-func getMACFinUsers(f *excelize.File, input *Input) ([]usernameAndPassword, error) {
-	rows, err := f.GetRows(input.SheetName)
+func getMACFinUsers(f *excelize.File, input *Input, env Environment) ([]usernameAndPassword, error) {
+	sheetName := input.SheetGroups[env].SheetName
+	rows, err := f.GetRows(sheetName)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", input.SheetName, input.Filename, err)
+		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", sheetName, input.Filename, err)
 	}
 
 	users := []usernameAndPassword{}
@@ -65,9 +66,9 @@ func getMACFinUsers(f *excelize.File, input *Input) ([]usernameAndPassword, erro
 	rowOffset := input.RowOffset
 
 	for i, row := range rows[rowOffset:] {
-		err := validateRow(f, input.SheetName, i+rowOffset, usernameXCoord, passwordXCoord)
+		err := validateRow(f, sheetName, i+rowOffset, usernameXCoord, passwordXCoord)
 		if err != nil {
-			log.Printf("validating sheet %s, row %d: %s", input.SheetName, toSheetCoord(i+rowOffset), err)
+			log.Printf("validating sheet %s, row %d: %s", sheetName, toSheetCoord(i+rowOffset), err)
 			continue
 		}
 		users = append(users, usernameAndPassword{row[usernameXCoord], row[passwordXCoord]})
@@ -76,8 +77,8 @@ func getMACFinUsers(f *excelize.File, input *Input) ([]usernameAndPassword, erro
 	return users, nil
 }
 
-func getManagedUsers(f *excelize.File, input *Input) (map[string]PasswordRow, error) {
-	automatedSheet := input.AutomatedSheetName
+func getManagedUsers(f *excelize.File, input *Input, env Environment) (map[string]PasswordRow, error) {
+	automatedSheet := input.SheetGroups[env].AutomatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", automatedSheet, input.Filename, err)
@@ -99,20 +100,20 @@ func getManagedUsers(f *excelize.File, input *Input) (map[string]PasswordRow, er
 }
 
 // Sync PasswordManager usernames with MACFin users
-func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error {
-	macFinUsersToPasswords, err := getMACFinUsers(f, input)
+func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, env Environment) error {
+	macFinUsersToPasswords, err := getMACFinUsers(f, input, env)
 	if err != nil {
 		return err
 	}
 
-	userToPasswordRow, err := getManagedUsers(f, input)
+	userToPasswordRow, err := getManagedUsers(f, input, env)
 	if err != nil {
 		return err
 	}
 
 	rowOffset := input.RowOffset
 	numRows := len(userToPasswordRow) + rowOffset
-	automatedSheet := input.AutomatedSheetName
+	automatedSheet := input.SheetGroups[env].AutomatedSheetName
 
 	usersFound := map[string]struct{}{}
 	// add new MACFin users to automatedSheet
@@ -225,13 +226,14 @@ func copyCell(f *excelize.File, automatedSheetName string, srcX, srcY, destX, de
 }
 
 // Write new password to password column in the MACFin sheet
-func updateMACFinUsers(f *excelize.File, input *Input) error {
-	userToPasswordRow, err := getManagedUsers(f, input)
+func updateMACFinUsers(f *excelize.File, input *Input, env Environment) error {
+	userToPasswordRow, err := getManagedUsers(f, input, env)
 	if err != nil {
 		return err
 	}
 
-	rows, err := f.GetRows(input.SheetName)
+	sheetName := input.SheetGroups[env].SheetName
+	rows, err := f.GetRows(sheetName)
 	if err != nil {
 		return err
 	}
@@ -243,9 +245,9 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 	rowOffset := input.RowOffset
 
 	for i, row := range rows[rowOffset:] {
-		err := validateRow(f, input.SheetName, i+rowOffset, userX, passwordX)
+		err := validateRow(f, sheetName, i+rowOffset, userX, passwordX)
 		if err != nil {
-			log.Printf("validating sheet %s, row %d: %s", input.SheetName, toSheetCoord(i+rowOffset), err)
+			log.Printf("validating sheet %s, row %d: %s", sheetName, toSheetCoord(i+rowOffset), err)
 			continue
 		}
 
@@ -253,14 +255,14 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 		macPassword := row[passwordX]
 		if pwRow, ok := userToPasswordRow[user]; ok {
 			if pwRow.Password != macPassword {
-				err := writeCell(f, input.SheetName, passwordX, i+rowOffset, pwRow.Password)
+				err := writeCell(f, sheetName, passwordX, i+rowOffset, pwRow.Password)
 				if err != nil {
-					return fmt.Errorf("Error setting new password for user %s in sheet %s in row %d: %s", user, input.SheetName, toSheetCoord(i+rowOffset), err)
+					return fmt.Errorf("Error setting new password for user %s in sheet %s in row %d: %s", user, sheetName, toSheetCoord(i+rowOffset), err)
 				}
 				numPasswordsUpdated++
 			}
 		} else {
-			return fmt.Errorf("macFin user %s missing from PasswordManager users; failed to update sheet %s with new passwords", user, input.SheetName)
+			return fmt.Errorf("macFin user %s missing from PasswordManager users; failed to update sheet %s with new passwords", user, sheetName)
 		}
 	}
 

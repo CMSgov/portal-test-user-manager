@@ -581,24 +581,30 @@ func TestRotate(t *testing.T) {
 			}()
 
 			input := &Input{
-				SheetName:              sheetNameMACFin,
 				UsernameHeader:         headingMACFinUsername,
 				PasswordHeader:         headinggMACFinPassword,
 				Filename:               filename,
 				AutomatedSheetPassword: "asfas",
-				AutomatedSheetName:     "PasswordManager",
 				AutomatedSheetColNameToIndex: map[Column]int{
 					ColUser: 0, ColPassword: 1, ColPrevious: 2, ColTimestamp: 3},
 				RowOffset: 1,
+				SheetGroups: map[Environment]SheetGroup{
+					dev: {
+						AutomatedSheetName: "PasswordManager",
+						SheetName:          sheetNameMACFin,
+					},
+				},
 			}
 
-			portal := &Portal{
-				Hostname:    portalServer,
-				IDMHostname: idmServer,
-				Scheme:      "http://",
+			envToPortal := map[Environment]*Portal{
+				dev: {
+					Hostname:    portalServer,
+					IDMHostname: idmServer,
+					Scheme:      "http://",
+				},
 			}
 
-			err = rotate(input, portal)
+			err = rotate(input, envToPortal)
 			if err != nil {
 				t.Fatalf("Error running rotate(): %s", err)
 			}
