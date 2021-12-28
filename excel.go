@@ -14,6 +14,27 @@ type PasswordRow struct {
 	Row      int
 }
 
+type Row struct {
+	Username  string
+	Password  string
+	Previous  string
+	Timestamp string
+}
+
+type ByUsername []Row
+
+func (u ByUsername) Len() int {
+	return len(u)
+}
+
+func (u ByUsername) Swap(i, j int) {
+	u[i], u[j] = u[j], u[i]
+}
+
+func (u ByUsername) Less(i, j int) bool {
+	return u[i].Username < u[j].Username
+}
+
 func toSheetCoord(coord int) int {
 	return coord + 1
 }
@@ -166,6 +187,11 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 		return fmt.Errorf("failed saving %s after synchronizing automated sheet users to MACFin users: %s", input.Filename, err)
 	}
 
+	err = sortRows(f, input, automatedSheet)
+	if err != nil {
+		return fmt.Errorf("failed sorting %s after synchronizing sheet to MACFin users: %s", automatedSheet, err)
+	}
+
 	return nil
 }
 
@@ -221,6 +247,44 @@ func copyCell(f *excelize.File, automatedSheetName string, srcX, srcY, destX, de
 		return err
 	}
 
+	return nil
+}
+
+func sortRows(f *excelize.File, input *Input, sheetname string) error {
+	rows, err := f.GetRows(sheetname)
+	if err != nil {
+		return err
+	}
+
+	colUser := input.AutomatedSheetColNameToIndex[ColUser]
+	colPassword := input.AutomatedSheetColNameToIndex[ColPassword]
+	colPrevious := input.AutomatedSheetColNameToIndex[ColPrevious]
+	colTimestamp := input.AutomatedSheetColNameToIndex[ColTimestamp]
+
+	myRows := []Row{}
+	for _, row := range rows[input.RowOffset:] {
+		myRows = append(myRows, Row{
+			Username:  row[colUser],
+			Password:  row[colPassword],
+			Previous:  row[colPrevious],
+			Timestamp: row[colTimestamp],
+		})
+
+	}
+	sort.Sort(ByUsername(myRows))
+	// write sorted rows to automatedSheet
+	for idx, r := range myRows {
+		cellName := "A" + fmt.Sprintf("%d", 2+idx)
+		err = f.SetSheetRow(sheetname, cellName, &[]string{r.Username, r.Password, r.Previous, r.Timestamp})
+		if err != nil {
+			return fmt.Errorf("Error writing sorted sheet: %s", err)
+		}
+	}
+
+	err = f.Save()
+	if err != nil {
+		return fmt.Errorf("Error saving sheet %s: %s", sheetname, err)
+	}
 	return nil
 }
 
