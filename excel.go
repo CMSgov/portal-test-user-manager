@@ -14,27 +14,6 @@ type PasswordRow struct {
 	Row      int
 }
 
-type Row struct {
-	Username  string
-	Password  string
-	Previous  string
-	Timestamp string
-}
-
-type ByUsername []Row
-
-func (u ByUsername) Len() int {
-	return len(u)
-}
-
-func (u ByUsername) Swap(i, j int) {
-	u[i], u[j] = u[j], u[i]
-}
-
-func (u ByUsername) Less(i, j int) bool {
-	return u[i].Username < u[j].Username
-}
-
 func toSheetCoord(coord int) int {
 	return coord + 1
 }
@@ -261,21 +240,13 @@ func sortRows(f *excelize.File, input *Input, sheetname string) error {
 	colPrevious := input.AutomatedSheetColNameToIndex[ColPrevious]
 	colTimestamp := input.AutomatedSheetColNameToIndex[ColTimestamp]
 
-	myRows := []Row{}
-	for _, row := range rows[input.RowOffset:] {
-		myRows = append(myRows, Row{
-			Username:  row[colUser],
-			Password:  row[colPassword],
-			Previous:  row[colPrevious],
-			Timestamp: row[colTimestamp],
-		})
-
-	}
-	sort.Sort(ByUsername(myRows))
+	sort.Slice(rows[input.RowOffset:], func(i, j int) bool {
+		return rows[input.RowOffset+i][colUser] < rows[input.RowOffset+j][colUser]
+	})
 	// write sorted rows to automatedSheet
-	for idx, r := range myRows {
-		cellName := "A" + fmt.Sprintf("%d", 2+idx)
-		err = f.SetSheetRow(sheetname, cellName, &[]string{r.Username, r.Password, r.Previous, r.Timestamp})
+	for idx, r := range rows[input.RowOffset:] {
+		cellName := fmt.Sprintf("A%d", 2+idx)
+		err = f.SetSheetRow(sheetname, cellName, &[]string{r[colUser], r[colPassword], r[colPrevious], r[colTimestamp]})
 		if err != nil {
 			return fmt.Errorf("Error writing sorted sheet: %s", err)
 		}
