@@ -532,7 +532,7 @@ func TestRotate(t *testing.T) {
 				panic(err)
 			}
 			for idx, row := range tc.MACFinIn {
-				err := f.SetSheetRow(sheetNameMACFin, "A"+string(rune('2'+idx)), &[]string{
+				err := f.SetSheetRow(sheetNameMACFin, fmt.Sprintf("A%d", 2+idx), &[]string{
 					"a", "b", "c", "d", row.Username, row.Password,
 				})
 				if err != nil {
@@ -550,7 +550,7 @@ func TestRotate(t *testing.T) {
 				panic(err)
 			}
 			for idx, row := range tc.PasswordManagerIn {
-				err := f.SetSheetRow(sheetNamePasswordManager, "A"+fmt.Sprintf("%d", 2+idx), &[]string{
+				err := f.SetSheetRow(sheetNamePasswordManager, fmt.Sprintf("A%d", 2+idx), &[]string{
 					row.Username, row.Password, row.Previous, format(row.Timestamp),
 				})
 				if err != nil {
