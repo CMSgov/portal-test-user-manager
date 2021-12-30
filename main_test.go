@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -225,11 +223,16 @@ type TestCase struct {
 	MACFinIn           []MACFinRow
 	UntrackedPasswords map[string]string // user -> password
 	ServerErrors       map[string]string // user -> path
+	ClientBucket       string
+	ClientKey          string
+	AWSBucket          string
 }
 
 var testCases = []TestCase{
 	{
-		Name: "rotate some",
+		Name:         "rotate some",
+		ClientBucket: "MACFin",
+		AWSBucket:    "MACFin",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -276,7 +279,9 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name: "delete at end",
+		Name:         "delete at end",
+		ClientBucket: "MACFin",
+		AWSBucket:    "MACFin",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -298,7 +303,9 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name: "delete middle",
+		Name:         "delete middle",
+		ClientBucket: "MACFin",
+		AWSBucket:    "MACFin",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -327,7 +334,9 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name: "delete at beginning",
+		Name:         "delete at beginning",
+		ClientBucket: "MACFin",
+		AWSBucket:    "MACFin",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -349,7 +358,9 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name: "delete all",
+		Name:         "delete all",
+		ClientBucket: "MACFin",
+		AWSBucket:    "MACFin",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -365,7 +376,9 @@ var testCases = []TestCase{
 		MACFinIn:           []MACFinRow{},
 	},
 	{
-		Name: "add new",
+		Name:         "add new",
+		ClientBucket: "MACFin",
+		AWSBucket:    "MACFin",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"chris", "foo", "", -20 * Day,
@@ -396,6 +409,8 @@ var testCases = []TestCase{
 	},
 	{
 		Name:              "add all",
+		ClientBucket:      "MACFin",
+		AWSBucket:         "MACFin",
 		PasswordManagerIn: []PasswordManagerRow{},
 		PasswordManagerOut: []PasswordManagerRow{
 			{
@@ -420,7 +435,9 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name: "add and delete",
+		Name:         "add and delete",
+		ClientBucket: "MACFin",
+		AWSBucket:    "MACFin",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -449,7 +466,9 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name: "error when logging in",
+		Name:         "error when logging in",
+		ClientBucket: "MACFin",
+		AWSBucket:    "MACFin",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -483,7 +502,9 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name: "error when changing password",
+		Name:         "error when changing password",
+		ClientBucket: "MACFin",
+		AWSBucket:    "MACFin",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -515,6 +536,23 @@ var testCases = []TestCase{
 			"leslie": changePasswordPath,
 		},
 	},
+	{
+		Name:               "client requests invalid bucket",
+		ClientBucket:       "BucketNotFound",
+		AWSBucket:          "MACFin",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+	},
+	{
+		Name:               "client requests invalid key",
+		ClientBucket:       "MACFin",
+		AWSBucket:          "MACFin",
+		ClientKey:          "/KeyNotFound",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+	},
 }
 
 type FakeS3Client struct {
@@ -533,53 +571,45 @@ func (fc *FakeS3Client) PutObject(ctx context.Context, params *s3.PutObjectInput
 	return fc.Put(ctx, params)
 }
 
-func (fc *FakeS3Client) New(filename string) *FakeS3Client {
+func (fc *FakeS3Client) New(bucket, key string) *FakeS3Client {
 	return &FakeS3Client{
 		Get: mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput) (*s3.GetObjectOutput, error) {
-			bucket := params.Bucket
-			if bucket == nil {
-				return nil, errors.New("bucket is nil")
+			if aws.StringValue(params.Bucket) != bucket {
+				return nil, fmt.Errorf("expected bucket %s; got %s", aws.StringValue(params.Bucket), bucket)
 			}
-			key := params.Key
-			if key == nil {
-				return nil, errors.New("key is nil")
+			if aws.StringValue(params.Key) != key {
+				return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), key)
 			}
-			f, err := excelize.OpenFile(filename)
+
+			f, err := os.Open(path.Join("/", key))
 			if err != nil {
 				return nil, fmt.Errorf("Error downloading s3 object: %s", err)
 			}
-			buff, err := f.WriteToBuffer()
-			if err != nil {
-				return nil, fmt.Errorf("Error downloading S3 object: %s", err)
-			}
-			b := buff.Bytes()
-			log.Printf("successfully downloaded %s (%d bytes) from s3", filename, len(b))
 			return &s3.GetObjectOutput{
-				Body: io.NopCloser(bytes.NewReader(b)),
+				Body: f,
 			}, nil
 		}),
 		Put: mockPutObjectAPI(func(ctx context.Context, params *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
-			bucket := params.Bucket
-			if bucket == nil {
-				return nil, errors.New("bucket is nil")
+			if aws.StringValue(params.Bucket) != bucket {
+				return nil, fmt.Errorf("expected bucket %s; got %s", aws.StringValue(params.Bucket), bucket)
 			}
-			key := params.Key
-			if key == nil {
-				return nil, errors.New("key is nil")
+			if aws.StringValue(params.Key) != key {
+				return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), key)
 			}
+
+			filename := path.Join("/", key)
 			body := params.Body
 			contents, err := io.ReadAll(body)
 			if err != nil {
 				return nil, fmt.Errorf("Error uploading file %s: %s", filename, err)
 			}
 
-			filename := path.Join("/", aws.StringValue(key))
-			err = os.WriteFile(filename, contents, 0666)
+			err = os.WriteFile(filename, contents, 0777)
 			if err != nil {
 				return nil, fmt.Errorf("cannot open %s: %s", filename, err)
 			}
 
-			log.Printf("opened %s (%d bytes) for upload to s3://%s/%s", filename, len(contents), *bucket, *key)
+			log.Printf("opened %s (%d bytes) for upload to s3://%s/%s", filename, len(contents), bucket, key)
 			return nil, nil
 		}),
 	}
@@ -588,7 +618,8 @@ func (fc *FakeS3Client) New(filename string) *FakeS3Client {
 func TestRotate(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			dir, err := os.MkdirTemp(os.TempDir(), "test-user-manager")
+			dir := path.Join(os.TempDir(), tc.ClientBucket)
+			err := os.MkdirAll(dir, 0777)
 			if err != nil {
 				t.Fatalf("Error making temp dir: %s", err)
 			}
@@ -659,7 +690,7 @@ func TestRotate(t *testing.T) {
 				SheetName:              sheetNameMACFin,
 				UsernameHeader:         headingMACFinUsername,
 				PasswordHeader:         headinggMACFinPassword,
-				Filename:               path.Join("s3://", filename),
+				Filename:               "s3://" + tc.AWSBucket + filename,
 				AutomatedSheetPassword: "asfas",
 				AutomatedSheetName:     "PasswordManager",
 				AutomatedSheetColNameToIndex: map[Column]int{
@@ -675,9 +706,12 @@ func TestRotate(t *testing.T) {
 
 			var fc FakeS3Client
 
-			err = rotate(input, portal, fc.New(filename))
+			err = rotate(input, portal, fc.New(tc.ClientBucket, strings.TrimPrefix(filename, "/")+tc.ClientKey))
 			if err != nil {
-				t.Fatalf("Error running rotate(): %s", err)
+				if tc.AWSBucket == tc.ClientBucket && tc.ClientKey == "" {
+					t.Fatalf("Error running rotate(): %s", err)
+				}
+				log.Print(err)
 			}
 
 			server.Shutdown(context.Background())

@@ -181,7 +181,7 @@ func rotate(input *Input, portal *Portal, client S3ClientAPI) error {
 
 	err = uploadFile(f, input, client)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	return nil
