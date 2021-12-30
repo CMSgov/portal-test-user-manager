@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -71,7 +72,7 @@ func getMACFinUsers(f *excelize.File, input *Input, env Environment) ([]username
 			log.Printf("validating sheet %s, row %d: %s", sheetName, toSheetCoord(i+rowOffset), err)
 			continue
 		}
-		users = append(users, usernameAndPassword{row[usernameXCoord], row[passwordXCoord]})
+		users = append(users, usernameAndPassword{strings.ToLower(row[usernameXCoord]), row[passwordXCoord]})
 	}
 
 	return users, nil
@@ -253,7 +254,7 @@ func updateMACFinUsers(f *excelize.File, input *Input, env Environment) error {
 
 		user := row[userX]
 		macPassword := row[passwordX]
-		if pwRow, ok := userToPasswordRow[user]; ok {
+		if pwRow, ok := userToPasswordRow[strings.ToLower(user)]; ok {
 			if pwRow.Password != macPassword {
 				err := writeCell(f, sheetName, passwordX, i+rowOffset, pwRow.Password)
 				if err != nil {
