@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -100,7 +101,7 @@ func getManagedUsers(f *excelize.File, input *Input) (map[string]PasswordRow, er
 }
 
 // Sync PasswordManager usernames with MACFin users
-func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error {
+func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI) error {
 	macFinUsersToPasswords, err := getMACFinUsers(f, input)
 	if err != nil {
 		return err
@@ -112,7 +113,8 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	}
 
 	rowOffset := input.RowOffset
-	numRows := len(userToPasswordRow) + rowOffset
+	initialNumRows := len(userToPasswordRow) + rowOffset
+	numRows := initialNumRows
 	automatedSheet := input.AutomatedSheetName
 
 	usersFound := map[string]struct{}{}
@@ -165,6 +167,19 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 	err = f.Save()
 	if err != nil {
 		return fmt.Errorf("failed saving %s after synchronizing automated sheet users to MACFin users: %s", input.Filename, err)
+	}
+
+	if numRows > initialNumRows || len(rowsToDelete) > 0 {
+		// automated sheet changed
+		u, err := url.Parse(input.Filename)
+		if err != nil {
+			return err
+		}
+		err = uploadFile(f, u.Host, strings.TrimPrefix(u.Path, "/"), client)
+		if err != nil {
+			return fmt.Errorf("Error uploading file after synchronizing: %s", err)
+		}
+		log.Printf("successfully uploaded file to %s after syncrhonization", input.Filename)
 	}
 
 	return nil
@@ -226,7 +241,7 @@ func copyCell(f *excelize.File, automatedSheetName string, srcX, srcY, destX, de
 }
 
 // Write new password to password column in the MACFin sheet
-func updateMACFinUsers(f *excelize.File, input *Input) error {
+func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI) error {
 	userToPasswordRow, err := getManagedUsers(f, input)
 	if err != nil {
 		return err
@@ -263,6 +278,19 @@ func updateMACFinUsers(f *excelize.File, input *Input) error {
 		} else {
 			return fmt.Errorf("macFin user %s missing from PasswordManager users; failed to update sheet %s with new passwords", user, input.SheetName)
 		}
+	}
+
+	if numPasswordsUpdated > 0 {
+		u, err := url.Parse(input.Filename)
+		if err != nil {
+			return fmt.Errorf("Error parsing filename: %s", err)
+		}
+
+		err = uploadFile(f, u.Host, strings.TrimPrefix(u.Path, "/"), client)
+		if err != nil {
+			return fmt.Errorf("Error uploading file: %s", err)
+		}
+		log.Printf("successfully uploaded file to %s after updating sheet %s", input.Filename, input.SheetName)
 	}
 
 	return nil

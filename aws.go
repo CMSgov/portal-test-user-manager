@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net/url"
 	"os"
 	"path"
@@ -85,30 +84,20 @@ func downloadS3Object(url *url.URL, client S3ClientAPI) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func uploadFile(f *excelize.File, input *Input, client S3ClientAPI) error {
-	u, err := url.Parse(input.Filename)
+func uploadFile(f *excelize.File, bucket, key string, s3Client S3ClientAPI) error {
+	fp, err := os.Open(f.Path)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error opening file: %s", err)
 	}
+	defer fp.Close()
 
-	bucket := u.Host
-	key := strings.TrimPrefix(u.Path, "/")
-	file, err := os.Open(f.Path)
-	if err != nil {
-		return fmt.Errorf("failed to upload file %s to S3: %s", f.Path, err)
-	}
-	defer file.Close()
-
-	_, err = client.PutObject(context.Background(), &s3.PutObjectInput{
+	_, err = s3Client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
-		Body:   file,
+		Body:   fp,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("Error uploading file to s3: %s", err)
 	}
-
-	log.Printf("successfully uploaded %s to s3://%s", key, bucket)
-
 	return nil
 }
