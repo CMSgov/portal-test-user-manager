@@ -267,6 +267,7 @@ var testCases = []TestCase{
 			{"", ""}, // make sure we aren't confused by blank entries
 			{"chuck", "y"},
 			{"leslie", "bar"}, // repeated
+			{"LESLIe", "bar"}, // repeated with different capitalization
 		},
 	},
 	{
@@ -317,7 +318,7 @@ var testCases = []TestCase{
 		},
 		MACFinIn: []MACFinRow{
 			{"ben", "x"},
-			{"leslie", "bar"},
+			{"Leslie", "bar"}, // uppercase
 		},
 	},
 	{
@@ -381,6 +382,7 @@ var testCases = []TestCase{
 			{"james", "baz"}, // duplicate
 			{"chris", "foo"},
 			{"leslie", "bar"},
+			{"CHRIS", "foo"}, // duplicate with different capitalization
 		},
 		UntrackedPasswords: map[string]string{
 			"leslie": "bar",
@@ -404,10 +406,10 @@ var testCases = []TestCase{
 		MACFinIn: []MACFinRow{
 			{"james", "baz"},
 			{"chris", "foo"},
-			{"leslie", "bar"},
+			{"Leslie", "bar"}, // contains uppercase
 		},
 		UntrackedPasswords: map[string]string{
-			"leslie": "bar",
+			"Leslie": "bar",
 			"james":  "baz",
 			"chris":  "foo",
 		},
@@ -435,10 +437,10 @@ var testCases = []TestCase{
 		},
 		MACFinIn: []MACFinRow{
 			{"chris", "foo"},
-			{"chuck", "chuckie"},
+			{"CHUCK", "chuckie"},
 		},
 		UntrackedPasswords: map[string]string{
-			"chuck": "chuckie",
+			"CHUCK": "chuckie",
 		},
 	},
 	{
@@ -569,7 +571,7 @@ func TestRotate(t *testing.T) {
 			}
 			if tc.UntrackedPasswords != nil {
 				for username, password := range tc.UntrackedPasswords {
-					handler.UserToPassword[username] = password
+					handler.UserToPassword[strings.ToLower(username)] = password
 				}
 			}
 			server := &http.Server{
@@ -677,7 +679,7 @@ func TestRotate(t *testing.T) {
 				}
 				username := row[4]
 				password := row[5]
-				expectedPassword, ok := userToPassword[username]
+				expectedPassword, ok := userToPassword[strings.ToLower(username)]
 				if !ok {
 					t.Fatalf("%s row %d: user %q is not in password manager",
 						sheetNameMACFin, idx+1, username)
