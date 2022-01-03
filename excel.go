@@ -236,18 +236,14 @@ func sortRows(f *excelize.File, input *Input, sheetname string) error {
 		return err
 	}
 
-	colUser := input.AutomatedSheetColNameToIndex[ColUser]
-	colPassword := input.AutomatedSheetColNameToIndex[ColPassword]
-	colPrevious := input.AutomatedSheetColNameToIndex[ColPrevious]
-	colTimestamp := input.AutomatedSheetColNameToIndex[ColTimestamp]
-
 	sort.Slice(rows[input.RowOffset:], func(i, j int) bool {
-		return rows[input.RowOffset+i][colUser] < rows[input.RowOffset+j][colUser]
+		return rows[input.RowOffset+i][ColUser] < rows[input.RowOffset+j][ColUser]
 	})
+
 	// write sorted rows to automatedSheet
 	for idx, r := range rows[input.RowOffset:] {
 		cellName := fmt.Sprintf("A%d", 2+idx)
-		err = f.SetSheetRow(sheetname, cellName, &[]string{r[colUser], r[colPassword], r[colPrevious], r[colTimestamp]})
+		err = f.SetSheetRow(sheetname, cellName, &[]string{r[ColUser], r[ColPassword], r[ColPrevious], r[ColTimestamp]})
 		if err != nil {
 			return fmt.Errorf("Error writing sorted sheet: %s", err)
 		}
