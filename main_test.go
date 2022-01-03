@@ -223,16 +223,11 @@ type TestCase struct {
 	MACFinIn           []MACFinRow
 	UntrackedPasswords map[string]string // user -> password
 	ServerErrors       map[string]string // user -> path
-	ClientBucket       string
-	ClientKey          string
-	AWSBucket          string
 }
 
 var testCases = []TestCase{
 	{
-		Name:         "rotate some",
-		ClientBucket: "MACFin",
-		AWSBucket:    "MACFin",
+		Name: "rotate some",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -279,9 +274,7 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name:         "delete at end",
-		ClientBucket: "MACFin",
-		AWSBucket:    "MACFin",
+		Name: "delete at end",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -303,9 +296,7 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name:         "delete middle",
-		ClientBucket: "MACFin",
-		AWSBucket:    "MACFin",
+		Name: "delete middle",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -334,9 +325,7 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name:         "delete at beginning",
-		ClientBucket: "MACFin",
-		AWSBucket:    "MACFin",
+		Name: "delete at beginning",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -358,9 +347,7 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name:         "delete all",
-		ClientBucket: "MACFin",
-		AWSBucket:    "MACFin",
+		Name: "delete all",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -376,9 +363,7 @@ var testCases = []TestCase{
 		MACFinIn:           []MACFinRow{},
 	},
 	{
-		Name:         "add new",
-		ClientBucket: "MACFin",
-		AWSBucket:    "MACFin",
+		Name: "add new",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"chris", "foo", "", -20 * Day,
@@ -409,8 +394,6 @@ var testCases = []TestCase{
 	},
 	{
 		Name:              "add all",
-		ClientBucket:      "MACFin",
-		AWSBucket:         "MACFin",
 		PasswordManagerIn: []PasswordManagerRow{},
 		PasswordManagerOut: []PasswordManagerRow{
 			{
@@ -435,9 +418,7 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name:         "add and delete",
-		ClientBucket: "MACFin",
-		AWSBucket:    "MACFin",
+		Name: "add and delete",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -466,9 +447,7 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name:         "error when logging in",
-		ClientBucket: "MACFin",
-		AWSBucket:    "MACFin",
+		Name: "error when logging in",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -502,9 +481,7 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		Name:         "error when changing password",
-		ClientBucket: "MACFin",
-		AWSBucket:    "MACFin",
+		Name: "error when changing password",
 		PasswordManagerIn: []PasswordManagerRow{
 			{
 				"ben", "x", "", -80 * Day,
@@ -535,23 +512,6 @@ var testCases = []TestCase{
 		ServerErrors: map[string]string{
 			"leslie": changePasswordPath,
 		},
-	},
-	{
-		Name:               "client requests invalid bucket",
-		ClientBucket:       "BucketNotFound",
-		AWSBucket:          "MACFin",
-		PasswordManagerIn:  []PasswordManagerRow{},
-		PasswordManagerOut: []PasswordManagerRow{},
-		MACFinIn:           []MACFinRow{},
-	},
-	{
-		Name:               "client requests invalid key",
-		ClientBucket:       "MACFin",
-		AWSBucket:          "MACFin",
-		ClientKey:          "/KeyNotFound",
-		PasswordManagerIn:  []PasswordManagerRow{},
-		PasswordManagerOut: []PasswordManagerRow{},
-		MACFinIn:           []MACFinRow{},
 	},
 }
 
@@ -618,7 +578,7 @@ func (fc *FakeS3Client) New(bucket, key string) *FakeS3Client {
 func TestRotate(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			dir := path.Join(os.TempDir(), tc.ClientBucket)
+			dir := path.Join(os.TempDir(), "macfin")
 			err := os.MkdirAll(dir, 0777)
 			if err != nil {
 				t.Fatalf("Error making temp dir: %s", err)
@@ -690,7 +650,8 @@ func TestRotate(t *testing.T) {
 				SheetName:              sheetNameMACFin,
 				UsernameHeader:         headingMACFinUsername,
 				PasswordHeader:         headinggMACFinPassword,
-				Filename:               "s3://" + tc.AWSBucket + filename,
+				Bucket:                 "macfin",
+				Key:                    strings.TrimPrefix(filename, "/"),
 				AutomatedSheetPassword: "asfas",
 				AutomatedSheetName:     "PasswordManager",
 				AutomatedSheetColNameToIndex: map[Column]int{
@@ -706,12 +667,9 @@ func TestRotate(t *testing.T) {
 
 			var fc FakeS3Client
 
-			err = rotate(input, portal, fc.New(tc.ClientBucket, strings.TrimPrefix(filename, "/")+tc.ClientKey))
+			err = rotate(input, portal, fc.New(input.Bucket, input.Key))
 			if err != nil {
-				if tc.AWSBucket == tc.ClientBucket && tc.ClientKey == "" {
-					t.Fatalf("Error running rotate(): %s", err)
-				}
-				log.Print(err)
+				t.Fatalf("Error running rotate(): %s", err)
 			}
 
 			server.Shutdown(context.Background())
