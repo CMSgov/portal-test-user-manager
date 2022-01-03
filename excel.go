@@ -243,7 +243,7 @@ func sortRows(f *excelize.File, input *Input, sheetname string) error {
 	// write sorted rows to automatedSheet
 	for idx, r := range rows[input.RowOffset:] {
 		cellName := fmt.Sprintf("A%d", 2+idx)
-		err = f.SetSheetRow(sheetname, cellName, &[]string{r[ColUser], r[ColPassword], r[ColPrevious], r[ColTimestamp]})
+		err = f.SetSheetRow(sheetname, cellName, &r)
 		if err != nil {
 			return fmt.Errorf("Error writing sorted sheet: %s", err)
 		}
