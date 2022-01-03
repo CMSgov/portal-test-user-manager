@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/url"
 	"sort"
 	"strings"
 
@@ -56,7 +55,7 @@ type usernameAndPassword struct {
 func getMACFinUsers(f *excelize.File, input *Input) ([]usernameAndPassword, error) {
 	rows, err := f.GetRows(input.SheetName)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", input.SheetName, input.Filename, err)
+		return nil, fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", input.SheetName, input.Bucket, input.Key, err)
 	}
 
 	users := []usernameAndPassword{}
@@ -82,7 +81,7 @@ func getManagedUsers(f *excelize.File, input *Input) (map[string]PasswordRow, er
 	automatedSheet := input.AutomatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", automatedSheet, input.Filename, err)
+		return nil, fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", automatedSheet, input.Bucket, input.Key, err)
 	}
 
 	rowOffset := input.RowOffset
@@ -135,7 +134,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, clien
 			for name, idx := range input.AutomatedSheetColNameToIndex {
 				err := writeCell(f, automatedSheet, idx, numRows, values[int(name)])
 				if err != nil {
-					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", up.Username, automatedSheet, input.Filename, err)
+					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", up.Username, automatedSheet, f.Path, err)
 				}
 			}
 			numRows++
@@ -160,26 +159,22 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, clien
 		rowToDelete := toSheetCoord(rowsToDelete[idx] + rowOffset)
 		err := f.RemoveRow(automatedSheet, rowToDelete)
 		if err != nil {
-			return fmt.Errorf("failed removing row %d from %s sheet in file %s: %s", rowToDelete, automatedSheet, input.Filename, err)
+			return fmt.Errorf("failed removing row %d from %s sheet in file %s: %s", rowToDelete, automatedSheet, f.Path, err)
 		}
 	}
 
 	err = f.Save()
 	if err != nil {
-		return fmt.Errorf("failed saving %s after synchronizing automated sheet users to MACFin users: %s", input.Filename, err)
+		return fmt.Errorf("failed saving file %s after synchronizing automated sheet users to MACFin users: %s", f.Path, err)
 	}
 
 	if numRows > initialNumRows || len(rowsToDelete) > 0 {
 		// automated sheet changed
-		u, err := url.Parse(input.Filename)
-		if err != nil {
-			return err
-		}
-		err = uploadFile(f, u.Host, strings.TrimPrefix(u.Path, "/"), client)
+		err = uploadFile(f, input.Bucket, input.Key, client)
 		if err != nil {
 			return fmt.Errorf("Error uploading file after synchronizing: %s", err)
 		}
-		log.Printf("successfully uploaded file to %s after syncrhonization", input.Filename)
+		log.Printf("successfully uploaded file to s3://%s/%s after syncrhonization", input.Bucket, input.Key)
 	}
 
 	return nil
@@ -281,16 +276,11 @@ func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI) error
 	}
 
 	if numPasswordsUpdated > 0 {
-		u, err := url.Parse(input.Filename)
-		if err != nil {
-			return fmt.Errorf("Error parsing filename: %s", err)
-		}
-
-		err = uploadFile(f, u.Host, strings.TrimPrefix(u.Path, "/"), client)
+		err = uploadFile(f, input.Bucket, input.Key, client)
 		if err != nil {
 			return fmt.Errorf("Error uploading file: %s", err)
 		}
-		log.Printf("successfully uploaded file to %s after updating sheet %s", input.Filename, input.SheetName)
+		log.Printf("successfully uploaded file to s3://%s/%s after updating sheet %s", input.Bucket, input.Key, input.SheetName)
 	}
 
 	return nil

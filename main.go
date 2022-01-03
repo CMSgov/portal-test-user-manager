@@ -5,10 +5,8 @@ import (
 	"log"
 	"net/http"
 	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/xuri/excelize/v2"
@@ -28,7 +26,8 @@ const (
 )
 
 type Input struct {
-	Filename                     string
+	Bucket                       string
+	Key                          string
 	SheetName                    string
 	UsernameHeader               string
 	PasswordHeader               string
@@ -60,13 +59,6 @@ func portalClient() *http.Client {
 }
 
 func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3ClientAPI) (err error) {
-	u, err := url.Parse(input.Filename)
-	if err != nil {
-		return err
-	}
-	bucket := u.Host
-	key := strings.TrimPrefix(u.Path, "/")
-
 	automatedSheet := input.AutomatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
@@ -148,7 +140,7 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3C
 
 			log.Printf("%s: rotation complete", name)
 
-			err = uploadFile(f, bucket, key, s3Client)
+			err = uploadFile(f, input.Bucket, input.Key, s3Client)
 			if err != nil {
 				return fmt.Errorf("Error uploading file after successful rotation: %s", err)
 			}
@@ -204,7 +196,8 @@ func main() {
 		SheetName:              os.Getenv("MACFINSHEETNAME"),
 		UsernameHeader:         os.Getenv("USERNAMEHEADER"),
 		PasswordHeader:         os.Getenv("PASSWORDHEADER"),
-		Filename:               os.Getenv("FILENAME"),
+		Bucket:                 os.Getenv("BUCKET"),
+		Key:                    os.Getenv("KEY"),
 		AutomatedSheetPassword: os.Getenv("AUTOMATEDSHEETPASSWORD"),
 		AutomatedSheetName:     "PasswordManager",
 		AutomatedSheetColNameToIndex: map[Column]int{

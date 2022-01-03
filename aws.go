@@ -5,11 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -36,16 +34,7 @@ type S3ClientAPI interface {
 }
 
 func downloadFile(input *Input, client S3ClientAPI) (*excelize.File, error) {
-	u, err := url.Parse(input.Filename)
-	if err != nil {
-		return nil, err
-	}
-
-	if u.Scheme != "s3" {
-		return nil, fmt.Errorf("file url %s must begin with s3://", input.Filename)
-	}
-
-	obj, err := downloadS3Object(u, client)
+	obj, err := downloadS3Object(input.Bucket, input.Key, client)
 	if err != nil {
 		return nil, fmt.Errorf("Error downloading file: %s", err)
 	}
@@ -60,7 +49,7 @@ func downloadFile(input *Input, client S3ClientAPI) (*excelize.File, error) {
 		return nil, err
 	}
 
-	filename := filepath.Join(dir, path.Base(u.Path))
+	filename := filepath.Join(dir, path.Base(input.Key))
 	err = f.SaveAs(filename)
 	if err != nil {
 		return nil, fmt.Errorf("Error saving file to %s after downloading it: %s", filename, err)
@@ -68,10 +57,7 @@ func downloadFile(input *Input, client S3ClientAPI) (*excelize.File, error) {
 	return f, nil
 }
 
-func downloadS3Object(url *url.URL, client S3ClientAPI) ([]byte, error) {
-	bucket := url.Host
-	key := strings.TrimPrefix(url.Path, "/")
-
+func downloadS3Object(bucket, key string, client S3ClientAPI) ([]byte, error) {
 	resp, err := client.GetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
