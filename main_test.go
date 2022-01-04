@@ -47,6 +47,34 @@ func cn(col, row int) string {
 	return name
 }
 
+func expectedSynch(PasswordManagerIn []PasswordManagerRow, MACFinIn []MACFinRow) bool {
+	pmUsers := make(map[string]bool, 0)
+	mcUsers := make(map[string]bool, 0)
+	for _, pmRow := range PasswordManagerIn {
+		pmUsers[pmRow.Username] = true
+	}
+	for _, mcRow := range MACFinIn {
+		if mcRow.Username != "" {
+			mcUsers[strings.ToLower(mcRow.Username)] = true
+		}
+	}
+	if len(pmUsers) != len(mcUsers) {
+		return true
+	}
+	for user := range pmUsers {
+		if !mcUsers[user] {
+			// need to delete from PasswordManagerIn
+			return true
+		}
+		delete(mcUsers, user)
+	}
+	if len(mcUsers) != 0 {
+		// need to add to PasswordManagerIn
+		return true
+	}
+	return false
+}
+
 const (
 	portalSessionCookieName = "IDMSession"
 	idmSessionCookieName    = "jsession"
@@ -518,6 +546,7 @@ var testCases = []TestCase{
 type FakeS3Client struct {
 	Bucket, Key string
 	LocalPath   string
+	Count       int
 }
 
 func (fc *FakeS3Client) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
@@ -556,6 +585,7 @@ func (fc *FakeS3Client) PutObject(ctx context.Context, params *s3.PutObjectInput
 	}
 
 	log.Printf("opened %s (%d bytes) for upload to s3://%s/%s", fc.LocalPath, n, fc.Bucket, fc.Key)
+	fc.Count++
 	return nil, nil
 }
 
@@ -648,10 +678,12 @@ func TestRotate(t *testing.T) {
 				Scheme:      "http://",
 			}
 
-			err = rotate(input, portal, &FakeS3Client{
+			fc := &FakeS3Client{
 				Bucket:    input.Bucket,
 				Key:       input.Key,
-				LocalPath: filename})
+				LocalPath: filename,
+			}
+			err = rotate(input, portal, fc)
 			if err != nil {
 				t.Fatalf("Error running rotate(): %s", err)
 			}
@@ -663,6 +695,20 @@ func TestRotate(t *testing.T) {
 				t.Fatalf("Error reopening spreadsheet: %s", err)
 			}
 
+			// verify number of file uploads to S3
+			expectedUploads := 0
+			expectedRotations := len(handler.UserToNewPassword)
+			if expectedRotations > 0 {
+				// add 1 for uploading after updating MACFin sheet
+				expectedUploads = expectedRotations + 1
+			}
+			if expectedSynch(tc.PasswordManagerIn, tc.MACFinIn) {
+				expectedUploads++
+			}
+			if fc.Count != expectedUploads {
+				t.Errorf("expected uploads: %d, actual uploads: %d", expectedUploads, fc.Count)
+			}
+
 			pmRows, err := f.GetRows(sheetNamePasswordManager)
 			if err != nil {
 				t.Fatalf("Error getting Password Manager rows: %s", err)
@@ -671,6 +717,7 @@ func TestRotate(t *testing.T) {
 				log.Fatalf("%s: Expected %d rows but got %d",
 					sheetNamePasswordManager, len(tc.PasswordManagerOut), len(pmRows))
 			}
+
 			userToPassword := map[string]string{}
 			for rowIdx, expected := range tc.PasswordManagerOut {
 				got := pmRows[rowIdx+1]
@@ -689,6 +736,7 @@ func TestRotate(t *testing.T) {
 						t.Fatalf("%s Row %d: new password recorded as %q but sent to server as %q",
 							sheetNamePasswordManager, rowIdx+1, got[1], newPassword)
 					}
+
 					delete(handler.UserToNewPassword, expected.Username)
 				} else if expected.Password == newPasswordMarker {
 					t.Fatalf("Expected a password change for %s but the server did not get one", expected.Username)
