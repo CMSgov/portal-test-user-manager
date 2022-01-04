@@ -236,8 +236,10 @@ func sortRows(f *excelize.File, input *Input, sheetname string) error {
 		return err
 	}
 
+	colUser := input.AutomatedSheetColNameToIndex[ColUser]
+
 	sort.Slice(rows[input.RowOffset:], func(i, j int) bool {
-		return rows[input.RowOffset+i][ColUser] < rows[input.RowOffset+j][ColUser]
+		return rows[input.RowOffset+i][colUser] < rows[input.RowOffset+j][colUser]
 	})
 
 	// write sorted rows to automatedSheet
