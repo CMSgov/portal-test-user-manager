@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -16,7 +15,8 @@ import (
 )
 
 const (
-	region string = "us-east-1"
+	region          string = "us-east-1"
+	localS3Filename        = "s3File.xlsx"
 )
 
 func createS3Client(region string) (*s3.Client, error) {
@@ -49,7 +49,7 @@ func downloadFile(input *Input, client S3ClientAPI) (*excelize.File, error) {
 		return nil, err
 	}
 
-	filename := filepath.Join(dir, path.Base(input.Key))
+	filename := filepath.Join(dir, localS3Filename)
 	err = f.SaveAs(filename)
 	if err != nil {
 		return nil, fmt.Errorf("Error saving file to %s after downloading it: %s", filename, err)

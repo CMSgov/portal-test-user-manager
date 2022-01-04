@@ -517,6 +517,7 @@ var testCases = []TestCase{
 
 type FakeS3Client struct {
 	Bucket, Key string
+	LocalPath   string
 }
 
 func (fc *FakeS3Client) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
@@ -527,7 +528,7 @@ func (fc *FakeS3Client) GetObject(ctx context.Context, params *s3.GetObjectInput
 		return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), fc.Key)
 	}
 
-	f, err := os.Open(path.Join("/", fc.Key))
+	f, err := os.Open(fc.LocalPath)
 	if err != nil {
 		return nil, fmt.Errorf("Error downloading s3 object: %s", err)
 	}
@@ -544,31 +545,30 @@ func (fc *FakeS3Client) PutObject(ctx context.Context, params *s3.PutObjectInput
 		return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), fc.Key)
 	}
 
-	filename := path.Join("/", fc.Key)
-	file, err := os.Create(filename)
+	f, err := os.Create(fc.LocalPath)
 	if err != nil {
-		return nil, fmt.Errorf("Error uploading file %s: %s", filename, err)
+		return nil, fmt.Errorf("Error uploading file %s: %s", fc.LocalPath, err)
 	}
-	n, err := io.Copy(file, params.Body)
+	defer f.Close()
+	n, err := io.Copy(f, params.Body)
 	if err != nil {
-		return nil, fmt.Errorf("Error uploading file %s: %s", filename, err)
+		return nil, fmt.Errorf("Error uploading file %s: %s", fc.LocalPath, err)
 	}
 
-	log.Printf("opened %s (%d bytes) for upload to s3://%s/%s", filename, n, fc.Bucket, fc.Key)
+	log.Printf("opened %s (%d bytes) for upload to s3://%s/%s", fc.LocalPath, n, fc.Bucket, fc.Key)
 	return nil, nil
 }
 
 func TestRotate(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			dir := path.Join(os.TempDir(), "macfin")
-			err := os.MkdirAll(dir, 0777)
+			dir, err := os.MkdirTemp(os.TempDir(), "macfin")
 			if err != nil {
 				t.Fatalf("Error making temp dir: %s", err)
 			}
 			log.Printf("Created %s", dir)
 			defer os.RemoveAll(dir)
-			filename := path.Join(dir, "in.xlsx")
+			filename := path.Join(dir, localS3Filename)
 			f := excelize.NewFile()
 
 			f.SetSheetName("Sheet1", sheetNameMACFin)
@@ -634,7 +634,7 @@ func TestRotate(t *testing.T) {
 				UsernameHeader:         headingMACFinUsername,
 				PasswordHeader:         headinggMACFinPassword,
 				Bucket:                 "macfin",
-				Key:                    strings.TrimPrefix(filename, "/"),
+				Key:                    "pre1/pre2/macfin-dev-lbk-s3.xlsx",
 				AutomatedSheetPassword: "asfas",
 				AutomatedSheetName:     "PasswordManager",
 				AutomatedSheetColNameToIndex: map[Column]int{
@@ -649,8 +649,9 @@ func TestRotate(t *testing.T) {
 			}
 
 			err = rotate(input, portal, &FakeS3Client{
-				Bucket: input.Bucket,
-				Key:    input.Key})
+				Bucket:    input.Bucket,
+				Key:       input.Key,
+				LocalPath: filename})
 			if err != nil {
 				t.Fatalf("Error running rotate(): %s", err)
 			}
