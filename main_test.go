@@ -516,63 +516,46 @@ var testCases = []TestCase{
 }
 
 type FakeS3Client struct {
-	Get mockGetObjectAPI
-	Put mockPutObjectAPI
+	Bucket, Key string
 }
 
-type mockGetObjectAPI func(ctx context.Context, params *s3.GetObjectInput) (*s3.GetObjectOutput, error)
-type mockPutObjectAPI func(ctx context.Context, params *s3.PutObjectInput) (*s3.PutObjectOutput, error)
-
 func (fc *FakeS3Client) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
-	return fc.Get(ctx, params)
+	if aws.StringValue(params.Bucket) != fc.Bucket {
+		return nil, fmt.Errorf("expected bucket %s; got %s", aws.StringValue(params.Bucket), fc.Bucket)
+	}
+	if aws.StringValue(params.Key) != fc.Key {
+		return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), fc.Key)
+	}
+
+	f, err := os.Open(path.Join("/", fc.Key))
+	if err != nil {
+		return nil, fmt.Errorf("Error downloading s3 object: %s", err)
+	}
+	return &s3.GetObjectOutput{
+		Body: f,
+	}, nil
 }
 
 func (fc *FakeS3Client) PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
-	return fc.Put(ctx, params)
-}
-
-func (fc *FakeS3Client) New(bucket, key string) *FakeS3Client {
-	return &FakeS3Client{
-		Get: mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput) (*s3.GetObjectOutput, error) {
-			if aws.StringValue(params.Bucket) != bucket {
-				return nil, fmt.Errorf("expected bucket %s; got %s", aws.StringValue(params.Bucket), bucket)
-			}
-			if aws.StringValue(params.Key) != key {
-				return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), key)
-			}
-
-			f, err := os.Open(path.Join("/", key))
-			if err != nil {
-				return nil, fmt.Errorf("Error downloading s3 object: %s", err)
-			}
-			return &s3.GetObjectOutput{
-				Body: f,
-			}, nil
-		}),
-		Put: mockPutObjectAPI(func(ctx context.Context, params *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
-			if aws.StringValue(params.Bucket) != bucket {
-				return nil, fmt.Errorf("expected bucket %s; got %s", aws.StringValue(params.Bucket), bucket)
-			}
-			if aws.StringValue(params.Key) != key {
-				return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), key)
-			}
-
-			filename := path.Join("/", key)
-			body := params.Body
-			contents, err := io.ReadAll(body)
-			if err != nil {
-				return nil, fmt.Errorf("Error uploading file %s: %s", filename, err)
-			}
-
-			err = os.WriteFile(filename, contents, 0777)
-			if err != nil {
-				return nil, fmt.Errorf("cannot open %s: %s", filename, err)
-			}
-
-			log.Printf("opened %s (%d bytes) for upload to s3://%s/%s", filename, len(contents), bucket, key)
-			return nil, nil
-		}),
+	if aws.StringValue(params.Bucket) != fc.Bucket {
+		return nil, fmt.Errorf("expected bucket %s; got %s", aws.StringValue(params.Bucket), fc.Bucket)
 	}
+	if aws.StringValue(params.Key) != fc.Key {
+		return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), fc.Key)
+	}
+
+	filename := path.Join("/", fc.Key)
+	file, err := os.Create(filename)
+	if err != nil {
+		return nil, fmt.Errorf("Error uploading file %s: %s", filename, err)
+	}
+	n, err := io.Copy(file, params.Body)
+	if err != nil {
+		return nil, fmt.Errorf("Error uploading file %s: %s", filename, err)
+	}
+
+	log.Printf("opened %s (%d bytes) for upload to s3://%s/%s", filename, n, fc.Bucket, fc.Key)
+	return nil, nil
 }
 
 func TestRotate(t *testing.T) {
@@ -665,9 +648,9 @@ func TestRotate(t *testing.T) {
 				Scheme:      "http://",
 			}
 
-			var fc FakeS3Client
-
-			err = rotate(input, portal, fc.New(input.Bucket, input.Key))
+			err = rotate(input, portal, &FakeS3Client{
+				Bucket: input.Bucket,
+				Key:    input.Key})
 			if err != nil {
 				t.Fatalf("Error running rotate(): %s", err)
 			}
