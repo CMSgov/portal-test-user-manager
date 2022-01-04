@@ -123,15 +123,15 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 		}
 		usersFound[up.Username] = struct{}{}
 		if _, ok := userToPasswordRow[up.Username]; !ok {
-			values := map[int]string{
-				input.AutomatedSheetColNameToIndex[ColUser]:      up.Username,
-				input.AutomatedSheetColNameToIndex[ColPassword]:  up.Password,
-				input.AutomatedSheetColNameToIndex[ColPrevious]:  up.Password,
-				input.AutomatedSheetColNameToIndex[ColTimestamp]: "Rotate Now",
+			values := map[Column]string{
+				ColUser:      up.Username,
+				ColPassword:  up.Password,
+				ColPrevious:  up.Password,
+				ColTimestamp: "Rotate Now",
 			}
 			// write new row
 			for name, idx := range input.AutomatedSheetColNameToIndex {
-				err := writeCell(f, automatedSheet, idx, numRows, values[int(name)])
+				err := writeCell(f, automatedSheet, idx, numRows, values[name])
 				if err != nil {
 					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", up.Username, automatedSheet, input.Filename, err)
 				}
