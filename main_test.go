@@ -253,13 +253,13 @@ var testCases = []TestCase{
 				"chris", "foo", "", 20 * Day,
 			},
 			{
-				"leslie", newPasswordMarker, "bar", 0,
+				"chuck", newPasswordMarker, "y", 0,
 			},
 			{
 				"james", "baz", "", -20 * Day,
 			},
 			{
-				"chuck", newPasswordMarker, "y", 0,
+				"leslie", newPasswordMarker, "bar", 0,
 			},
 		},
 		MACFinIn: []MACFinRow{
@@ -397,10 +397,10 @@ var testCases = []TestCase{
 		PasswordManagerIn: []PasswordManagerRow{},
 		PasswordManagerOut: []PasswordManagerRow{
 			{
-				"james", newPasswordMarker, "baz", 0,
+				"chris", newPasswordMarker, "foo", 0,
 			},
 			{
-				"chris", newPasswordMarker, "foo", 0,
+				"james", newPasswordMarker, "baz", 0,
 			},
 			{
 				"leslie", newPasswordMarker, "bar", 0,

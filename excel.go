@@ -167,6 +167,11 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input) error
 		return fmt.Errorf("failed saving %s after synchronizing automated sheet users to MACFin users: %s", input.Filename, err)
 	}
 
+	err = sortRows(f, input, automatedSheet)
+	if err != nil {
+		return fmt.Errorf("failed sorting %s after synchronizing sheet to MACFin users: %s", automatedSheet, err)
+	}
+
 	return nil
 }
 
@@ -222,6 +227,34 @@ func copyCell(f *excelize.File, automatedSheetName string, srcX, srcY, destX, de
 		return err
 	}
 
+	return nil
+}
+
+func sortRows(f *excelize.File, input *Input, sheetname string) error {
+	rows, err := f.GetRows(sheetname)
+	if err != nil {
+		return err
+	}
+
+	colUser := input.AutomatedSheetColNameToIndex[ColUser]
+
+	sort.Slice(rows[input.RowOffset:], func(i, j int) bool {
+		return rows[input.RowOffset+i][colUser] < rows[input.RowOffset+j][colUser]
+	})
+
+	// write sorted rows to automatedSheet
+	for idx, r := range rows[input.RowOffset:] {
+		cellName := fmt.Sprintf("A%d", 2+idx)
+		err = f.SetSheetRow(sheetname, cellName, &r)
+		if err != nil {
+			return fmt.Errorf("Error writing sorted sheet: %s", err)
+		}
+	}
+
+	err = f.Save()
+	if err != nil {
+		return fmt.Errorf("Error saving sheet %s: %s", sheetname, err)
+	}
 	return nil
 }
 
