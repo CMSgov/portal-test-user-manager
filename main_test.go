@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -50,6 +51,56 @@ func cn(col, row int) string {
 	return name
 }
 
+func verifyNewPasswordIsUploaded(fc *FakeS3Client, contents []byte) error {
+	uploadedFp, err := excelize.OpenFile(fc.LocalPath)
+	if err != nil {
+		return err
+	}
+
+	currFp, err := excelize.OpenReader(bytes.NewReader(contents))
+	if err != nil {
+		return err
+	}
+
+	uploadedRows, err := uploadedFp.GetRows(fc.AutomatedSheetName)
+	if err != nil {
+		return err
+	}
+	currentRows, err := currFp.GetRows(fc.AutomatedSheetName)
+	if err != nil {
+		return err
+	}
+
+	colUser := fc.AutomatedSheetColNameToIndex[ColUser]
+	colPassword := fc.AutomatedSheetColNameToIndex[ColPassword]
+	colPrevious := fc.AutomatedSheetColNameToIndex[ColPrevious]
+	upUserToPassword := make(map[string]string, 0)
+	for _, upr := range uploadedRows[fc.RowOffset:] {
+		upUserToPassword[upr[colUser]] = upr[colPassword]
+	}
+
+	numNewPasswords := 0
+
+	for _, cr := range currentRows[fc.RowOffset:] {
+		user := cr[colUser]
+		if pw, ok := upUserToPassword[user]; !ok {
+			// new user with new password
+			if cr[colPassword] != cr[colPrevious] {
+				numNewPasswords++
+			}
+
+		} else if pw != cr[colPassword] {
+			// new password for existing user
+			numNewPasswords++
+		}
+	}
+	if numNewPasswords > 1 {
+		fc.SkippedUpload = true
+	}
+
+	return nil
+}
+
 const (
 	portalSessionCookieName = "IDMSession"
 	idmSessionCookieName    = "jsession"
@@ -68,6 +119,8 @@ const (
 	// whatever the redirect is.
 	xsrfRedirectPath = "/portal/set-xsrf"
 )
+
+type currentFilePath string
 
 type session struct {
 	username  string
@@ -519,8 +572,12 @@ var testCases = []TestCase{
 }
 
 type FakeS3Client struct {
-	Bucket, Key string
-	LocalPath   string
+	Bucket, Key                  string
+	LocalPath                    string
+	AutomatedSheetName           string
+	AutomatedSheetColNameToIndex map[Column]int
+	RowOffset                    int
+	SkippedUpload                bool
 }
 
 func (fc *FakeS3Client) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
@@ -548,17 +605,30 @@ func (fc *FakeS3Client) PutObject(ctx context.Context, params *s3.PutObjectInput
 		return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), fc.Key)
 	}
 
+	contents, err := io.ReadAll(params.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// verify every password rotation has been uploaded except for, at most, one
+	// compare uploaded file (fc.LocalPath) and current file (params.Body)
+	err = verifyNewPasswordIsUploaded(fc, contents)
+	if err != nil {
+		return nil, fmt.Errorf("Error while checking for skipped file uploads: %s", err)
+	}
+
 	f, err := os.Create(fc.LocalPath)
 	if err != nil {
-		return nil, fmt.Errorf("Error uploading file %s: %s", fc.LocalPath, err)
+		return nil, fmt.Errorf("Error uploading file: %s", err)
 	}
 	defer f.Close()
-	n, err := io.Copy(f, params.Body)
+	n, err := io.Copy(f, bytes.NewReader(contents))
 	if err != nil {
 		return nil, fmt.Errorf("Error uploading file %s: %s", fc.LocalPath, err)
 	}
 
 	log.Printf("opened %s (%d bytes) for upload to s3://%s/%s", fc.LocalPath, n, fc.Bucket, fc.Key)
+
 	return nil, nil
 }
 
@@ -681,15 +751,22 @@ func TestRotate(t *testing.T) {
 					Scheme:      "http://",
 				}
 
-				err = rotate(input, portal, &FakeS3Client{
-					Bucket:    input.Bucket,
-					Key:       input.Key,
-					LocalPath: filename,
-				})
+				fc := &FakeS3Client{
+					Bucket:                       input.Bucket,
+					Key:                          input.Key,
+					LocalPath:                    filename,
+					AutomatedSheetName:           input.AutomatedSheetName,
+					AutomatedSheetColNameToIndex: input.AutomatedSheetColNameToIndex,
+					RowOffset:                    input.RowOffset,
+				}
+				err = rotate(input, portal, fc)
 				if err != nil {
 					t.Fatalf("Error running rotate(): %s", err)
 				}
 				server.Shutdown(context.Background())
+				if fc.SkippedUpload {
+					t.Errorf("Skipped file upload to %s after a password rotation", fc.LocalPath)
+				}
 
 				f, err = excelize.OpenFile(filename)
 				if err != nil {
