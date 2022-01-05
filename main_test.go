@@ -50,34 +50,6 @@ func cn(col, row int) string {
 	return name
 }
 
-func expectedSynch(PasswordManagerIn []PasswordManagerRow, MACFinIn []MACFinRow) bool {
-	pmUsers := make(map[string]bool, 0)
-	mcUsers := make(map[string]bool, 0)
-	for _, pmRow := range PasswordManagerIn {
-		pmUsers[pmRow.Username] = true
-	}
-	for _, mcRow := range MACFinIn {
-		if mcRow.Username != "" {
-			mcUsers[strings.ToLower(mcRow.Username)] = true
-		}
-	}
-	if len(pmUsers) != len(mcUsers) {
-		return true
-	}
-	for user := range pmUsers {
-		if !mcUsers[user] {
-			// need to delete from PasswordManagerIn
-			return true
-		}
-		delete(mcUsers, user)
-	}
-	if len(mcUsers) != 0 {
-		// need to add to PasswordManagerIn
-		return true
-	}
-	return false
-}
-
 const (
 	portalSessionCookieName = "IDMSession"
 	idmSessionCookieName    = "jsession"
@@ -549,7 +521,6 @@ var testCases = []TestCase{
 type FakeS3Client struct {
 	Bucket, Key string
 	LocalPath   string
-	Count       int
 }
 
 func (fc *FakeS3Client) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
@@ -588,7 +559,6 @@ func (fc *FakeS3Client) PutObject(ctx context.Context, params *s3.PutObjectInput
 	}
 
 	log.Printf("opened %s (%d bytes) for upload to s3://%s/%s", fc.LocalPath, n, fc.Bucket, fc.Key)
-	fc.Count++
 	return nil, nil
 }
 
@@ -624,13 +594,13 @@ func TestRotate(t *testing.T) {
 			name := fmt.Sprintf("%s - Columns %s", tc.Name, arr.Name)
 			cols := arr.Columns
 			t.Run(name, func(t *testing.T) {
-				dir, err := os.MkdirTemp(os.TempDir(), "test-user-manager")
+				dir, err := os.MkdirTemp(os.TempDir(), "macfin")
 				if err != nil {
 					t.Fatalf("Error making temp dir: %s", err)
 				}
 				log.Printf("Created %s", dir)
 				defer os.RemoveAll(dir)
-				filename := path.Join(dir, "in.xlsx")
+				filename := path.Join(dir, localS3Filename)
 				f := excelize.NewFile()
 
 				f.SetSheetName("Sheet1", sheetNameMACFin)
@@ -711,13 +681,11 @@ func TestRotate(t *testing.T) {
 					Scheme:      "http://",
 				}
 
-				fc := &FakeS3Client{
+				err = rotate(input, portal, &FakeS3Client{
 					Bucket:    input.Bucket,
 					Key:       input.Key,
 					LocalPath: filename,
-				}
-
-				err = rotate(input, portal, fc)
+				})
 				if err != nil {
 					t.Fatalf("Error running rotate(): %s", err)
 				}
@@ -726,20 +694,6 @@ func TestRotate(t *testing.T) {
 				f, err = excelize.OpenFile(filename)
 				if err != nil {
 					t.Fatalf("Error reopening spreadsheet: %s", err)
-				}
-
-				// verify number of file uploads to S3
-				expectedUploads := 0
-				expectedRotations := len(handler.UserToNewPassword)
-				if expectedRotations > 0 {
-					// add 1 for uploading after updating MACFin sheet
-					expectedUploads = expectedRotations + 1
-				}
-				if expectedSynch(tc.PasswordManagerIn, tc.MACFinIn) {
-					expectedUploads++
-				}
-				if fc.Count != expectedUploads {
-					t.Errorf("expected uploads: %d, actual uploads: %d", expectedUploads, fc.Count)
 				}
 
 				pmRows, err := f.GetRows(sheetNamePasswordManager)
