@@ -308,13 +308,11 @@ func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI) error
 		}
 	}
 
-	if numPasswordsUpdated > 0 {
-		err = uploadFile(f, input.Bucket, input.Key, client)
-		if err != nil {
-			return fmt.Errorf("Error uploading file: %s", err)
-		}
-		log.Printf("successfully uploaded file to s3://%s/%s after updating sheet %s", input.Bucket, input.Key, input.SheetName)
+	err = uploadFile(f, input.Bucket, input.Key, client)
+	if err != nil {
+		return fmt.Errorf("Error uploading file: %s", err)
 	}
+	log.Printf("successfully uploaded file to s3://%s/%s after updating sheet %s", input.Bucket, input.Key, input.SheetName)
 
 	return nil
 }
