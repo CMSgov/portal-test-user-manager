@@ -271,7 +271,6 @@ func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI) error
 		return err
 	}
 
-	numPasswordsUpdated := 0
 	headerNameToXCoord := getHeaderToXCoord(rows[0])
 	userX := headerNameToXCoord[input.UsernameHeader]
 	passwordX := headerNameToXCoord[input.PasswordHeader]
@@ -292,7 +291,6 @@ func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI) error
 				if err != nil {
 					return fmt.Errorf("Error setting new password for user %s in sheet %s in row %d: %s", user, input.SheetName, toSheetCoord(i+rowOffset), err)
 				}
-				numPasswordsUpdated++
 			}
 		} else {
 			return fmt.Errorf("macFin user %s missing from PasswordManager users; failed to update sheet %s with new passwords", user, input.SheetName)
