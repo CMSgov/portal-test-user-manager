@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -13,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -47,6 +51,56 @@ func cn(col, row int) string {
 	return name
 }
 
+func verifyNewPasswordIsUploaded(fc *FakeS3Client, contents []byte) error {
+	uploadedFp, err := excelize.OpenFile(fc.LocalPath)
+	if err != nil {
+		return err
+	}
+
+	currFp, err := excelize.OpenReader(bytes.NewReader(contents))
+	if err != nil {
+		return err
+	}
+
+	uploadedRows, err := uploadedFp.GetRows(fc.AutomatedSheetName)
+	if err != nil {
+		return err
+	}
+	currentRows, err := currFp.GetRows(fc.AutomatedSheetName)
+	if err != nil {
+		return err
+	}
+
+	colUser := fc.AutomatedSheetColNameToIndex[ColUser]
+	colPassword := fc.AutomatedSheetColNameToIndex[ColPassword]
+	colPrevious := fc.AutomatedSheetColNameToIndex[ColPrevious]
+	upUserToPassword := make(map[string]string, 0)
+	for _, upr := range uploadedRows[fc.RowOffset:] {
+		upUserToPassword[upr[colUser]] = upr[colPassword]
+	}
+
+	numNewPasswords := 0
+
+	for _, cr := range currentRows[fc.RowOffset:] {
+		user := cr[colUser]
+		if pw, ok := upUserToPassword[user]; !ok {
+			// new user with new password
+			if cr[colPassword] != cr[colPrevious] {
+				numNewPasswords++
+			}
+
+		} else if pw != cr[colPassword] {
+			// new password for existing user
+			numNewPasswords++
+		}
+	}
+	if numNewPasswords > 1 {
+		fc.SkippedUpload = true
+	}
+
+	return nil
+}
+
 const (
 	portalSessionCookieName = "IDMSession"
 	idmSessionCookieName    = "jsession"
@@ -65,6 +119,8 @@ const (
 	// whatever the redirect is.
 	xsrfRedirectPath = "/portal/set-xsrf"
 )
+
+type currentFilePath string
 
 type session struct {
 	username  string
@@ -515,6 +571,67 @@ var testCases = []TestCase{
 	},
 }
 
+type FakeS3Client struct {
+	Bucket, Key                  string
+	LocalPath                    string
+	AutomatedSheetName           string
+	AutomatedSheetColNameToIndex map[Column]int
+	RowOffset                    int
+	SkippedUpload                bool
+}
+
+func (fc *FakeS3Client) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	if aws.StringValue(params.Bucket) != fc.Bucket {
+		return nil, fmt.Errorf("expected bucket %s; got %s", aws.StringValue(params.Bucket), fc.Bucket)
+	}
+	if aws.StringValue(params.Key) != fc.Key {
+		return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), fc.Key)
+	}
+
+	f, err := os.Open(fc.LocalPath)
+	if err != nil {
+		return nil, fmt.Errorf("Error downloading s3 object: %s", err)
+	}
+	return &s3.GetObjectOutput{
+		Body: f,
+	}, nil
+}
+
+func (fc *FakeS3Client) PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	if aws.StringValue(params.Bucket) != fc.Bucket {
+		return nil, fmt.Errorf("expected bucket %s; got %s", aws.StringValue(params.Bucket), fc.Bucket)
+	}
+	if aws.StringValue(params.Key) != fc.Key {
+		return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), fc.Key)
+	}
+
+	contents, err := io.ReadAll(params.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// verify every password rotation has been uploaded except for, at most, one
+	// compare uploaded file (fc.LocalPath) and current file (params.Body)
+	err = verifyNewPasswordIsUploaded(fc, contents)
+	if err != nil {
+		return nil, fmt.Errorf("Error while checking for skipped file uploads: %s", err)
+	}
+
+	f, err := os.Create(fc.LocalPath)
+	if err != nil {
+		return nil, fmt.Errorf("Error uploading file: %s", err)
+	}
+	defer f.Close()
+	n, err := io.Copy(f, bytes.NewReader(contents))
+	if err != nil {
+		return nil, fmt.Errorf("Error uploading file %s: %s", fc.LocalPath, err)
+	}
+
+	log.Printf("opened %s (%d bytes) for upload to s3://%s/%s", fc.LocalPath, n, fc.Bucket, fc.Key)
+
+	return nil, nil
+}
+
 type ColumnArrangement struct {
 	Name    string
 	Columns map[Column]int
@@ -547,13 +664,13 @@ func TestRotate(t *testing.T) {
 			name := fmt.Sprintf("%s - Columns %s", tc.Name, arr.Name)
 			cols := arr.Columns
 			t.Run(name, func(t *testing.T) {
-				dir, err := os.MkdirTemp(os.TempDir(), "test-user-manager")
+				dir, err := os.MkdirTemp(os.TempDir(), "macfin")
 				if err != nil {
 					t.Fatalf("Error making temp dir: %s", err)
 				}
 				log.Printf("Created %s", dir)
 				defer os.RemoveAll(dir)
-				filename := path.Join(dir, "in.xlsx")
+				filename := path.Join(dir, localS3Filename)
 				f := excelize.NewFile()
 
 				f.SetSheetName("Sheet1", sheetNameMACFin)
@@ -620,7 +737,8 @@ func TestRotate(t *testing.T) {
 					SheetName:                    sheetNameMACFin,
 					UsernameHeader:               headingMACFinUsername,
 					PasswordHeader:               headinggMACFinPassword,
-					Filename:                     filename,
+					Bucket:                       "macfin",
+					Key:                          "pre1/pre2/macfin-dev-lbk-s3.xlsx",
 					AutomatedSheetPassword:       "asfas",
 					AutomatedSheetName:           "PasswordManager",
 					AutomatedSheetColNameToIndex: cols,
@@ -633,10 +751,23 @@ func TestRotate(t *testing.T) {
 					Scheme:      "http://",
 				}
 
-				err = rotate(input, portal)
+				fc := &FakeS3Client{
+					Bucket:                       input.Bucket,
+					Key:                          input.Key,
+					LocalPath:                    filename,
+					AutomatedSheetName:           input.AutomatedSheetName,
+					AutomatedSheetColNameToIndex: input.AutomatedSheetColNameToIndex,
+					RowOffset:                    input.RowOffset,
+				}
+				err = rotate(input, portal, fc)
 				server.Shutdown(context.Background())
+
 				if err != nil {
 					t.Fatalf("Error running rotate(): %s", err)
+				}
+
+				if fc.SkippedUpload {
+					t.Errorf("Skipped file upload to %s after a password rotation", fc.LocalPath)
 				}
 
 				f, err = excelize.OpenFile(filename)
