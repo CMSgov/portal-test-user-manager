@@ -309,7 +309,7 @@ func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI, env E
 	if err != nil {
 		return fmt.Errorf("Error uploading file: %s", err)
 	}
-	log.Printf("successfully uploaded file to s3://%s/%s after updating sheet %s", input.Bucket, input.Key, sheetName)
+	log.Printf("successfully uploaded file to s3://%s/%s after processing sheet %s", input.Bucket, input.Key, sheetName)
 
 	return nil
 }
