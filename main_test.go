@@ -760,10 +760,12 @@ func TestRotate(t *testing.T) {
 					RowOffset:                    input.RowOffset,
 				}
 				err = rotate(input, portal, fc)
+				server.Shutdown(context.Background())
+
 				if err != nil {
 					t.Fatalf("Error running rotate(): %s", err)
 				}
-				server.Shutdown(context.Background())
+
 				if fc.SkippedUpload {
 					t.Errorf("Skipped file upload to %s after a password rotation", fc.LocalPath)
 				}
