@@ -3,28 +3,27 @@
 A Terraform module which deploys a scheduled ECS task on a cron schedule.  This task runs an application which pulls a test user spreadsheet from S3, rotates the Enterprise Portal passwords for the test users, updates the spreadsheet, and pushes it back to S3. To read more about the password rotation application, see the README (TBD)
 
 ## Usage
-See the 'Inputs' section in [DOCS.md](DOCS.md) for variable descriptions and defaults
+See [variables.tf](variables.tf) for variable descriptions
 ```
 module "password-rotation" {
   source      = "github.com/CMSgov/portal-test-user-manager//password-rotation
   
-  app_name    = ""
+  app_name    = ""              // defaults to "password-rotation"
   environment = ""
-  task_name   = ""
+  task_name   = ""               // defaults to "scheduled-runner"
 
   repo_url                 = ""
-  image_tag                = ""
+  image_tag                = "" // defaults to "latest"
   ecs_vpc_id               = "" 
   ecs_subnet_ids           = [] 
-  schedule_task_expression = "" 
-  event_rule_enabled       = # true/false
+  schedule_task_expression = "" // defaults to "0 8 1 * ? *", monthly on the first day of the month at 8am UTC (3am UTC-5)
+  event_rule_enabled       =    // defaults to true
 
   s3_bucket          = ""
   s3_key             = ""
   sheet_name         = ""
   username_header    = ""
   password_header    = ""
-  portal_environment = ""
   portal_hostname    = ""
   idm_hostname       = ""
 }

@@ -18,7 +18,6 @@ module "password_rotation" {
   sheet_name         = ""
   username_header    = ""
   password_header    = ""
-  portal_environment = ""
   portal_hostname    = ""
   idm_hostname       = ""
 }

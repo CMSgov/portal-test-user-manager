@@ -45,7 +45,7 @@ variable "schedule_task_expression" {
 variable "event_rule_enabled" {
   type        = bool
   description = "Whether the event rule that triggers the task is enabled"
-  default      = true
+  default     = true
 }
 
 variable "s3_bucket" {
@@ -71,11 +71,6 @@ variable "username_header" {
 variable "password_header" {
   type        = string
   description = "Password header for the test user spreadsheet"
-}
-
-variable "portal_environment" {
-  type        = string
-  description = "Target environment for the CMS Enterprise Portal"
 }
 
 variable "portal_hostname" {

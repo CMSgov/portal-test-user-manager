@@ -15,9 +15,9 @@ import (
 func main() {
 	region := "us-east-1"
 
-	bucket := os.Getenv("S3_BUCKET")
-	key := os.Getenv("S3_KEY")
-	password := os.Getenv("SHEETPASSWORD")
+	bucket := os.Getenv("BUCKET")
+	key := os.Getenv("KEY")
+	password := os.Getenv("AUTOMATEDSHEETPASSWORD")
 
 	log.Printf("Parameter store access: sheet password is %q", password)
 

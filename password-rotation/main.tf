@@ -1,7 +1,5 @@
 locals {
   awslogs_group = "/aws/ecs/${var.app_name}-${var.environment}-${var.task_name}"
-  split_key = split("/", var.s3_key)
-  file_name = element(local.split_key, length(local.split_key) - 1)
 }
 
 data "aws_partition" "current" {}
@@ -34,9 +32,9 @@ data "aws_iam_policy_document" "events_assume_role_policy" {
 }
 
 resource "aws_iam_role" "cloudwatch_target_role" {
-  name               = "cw-target-role-${var.app_name}-${var.environment}-${var.task_name}"
-  description        = "Role allowing CloudWatch Events to run the task"
-  assume_role_policy = data.aws_iam_policy_document.events_assume_role_policy.json
+  name                = "cw-target-role-${var.app_name}-${var.environment}-${var.task_name}"
+  description         = "Role allowing CloudWatch Events to run the task"
+  assume_role_policy  = data.aws_iam_policy_document.events_assume_role_policy.json
   managed_policy_arns = ["arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceEventsRole"]
 }
 
@@ -83,22 +81,22 @@ resource "aws_iam_policy" "s3_access" {
 # ECS task execution role
 
 resource "aws_iam_role" "task_execution_role" {
-  name               = "ecs-task-exec-role-${var.app_name}-${var.environment}-${var.task_name}"
-  description        = "Role granting permissions to the ECS container agent/Docker daemon"
-  assume_role_policy = data.aws_iam_policy_document.ecs_assume_role_policy.json
+  name                = "ecs-task-exec-role-${var.app_name}-${var.environment}-${var.task_name}"
+  description         = "Role granting permissions to the ECS container agent/Docker daemon"
+  assume_role_policy  = data.aws_iam_policy_document.ecs_assume_role_policy.json
   managed_policy_arns = [aws_iam_policy.parameter_store.arn, "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"]
 }
 
 data "aws_iam_policy_document" "parameter_store" {
   statement {
     actions   = ["ssm:GetParameters"]
-    resources = ["${aws_ssm_parameter.sheet_password.arn}", ]
+    resources = ["${aws_ssm_parameter.automated_sheet_password.arn}", ]
     effect    = "Allow"
   }
 }
 
 resource "aws_iam_policy" "parameter_store" {
-  name   = "${var.app_name}-${var.environment}-${var.task_name}-parameter-store"
+  name        = "${var.app_name}-${var.environment}-${var.task_name}-parameter-store"
   description = "Policy granting access to parameter store"
   policy      = data.aws_iam_policy_document.parameter_store.json
 }
@@ -179,23 +177,21 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
 
   container_definitions = templatefile("${path.module}/container-definitions.json",
     {
-      app_name            = var.app_name,
-      task_name           = var.task_name,
-      environment         = var.environment,
-      repo_url            = var.repo_url
-      image_tag           = var.image_tag
-      s3_bucket           = var.s3_bucket,
-      s3_key              = var.s3_key,
-      file_name           = local.file_name
-      sheet_name          = var.sheet_name
-      username_header     = var.username_header
-      password_header     = var.password_header
-      portal_environment  = var.portal_environment
-      portal_hostname     = var.portal_hostname
-      idm_hostname        = var.idm_hostname
-      sheet_password_name = aws_ssm_parameter.sheet_password.name
-      awslogs_group       = local.awslogs_group,
-      awslogs_region      = data.aws_region.current.name
+      app_name                 = var.app_name,
+      task_name                = var.task_name,
+      environment              = var.environment,
+      repo_url                 = var.repo_url
+      image_tag                = var.image_tag
+      s3_bucket                = var.s3_bucket,
+      s3_key                   = var.s3_key,
+      sheet_name               = var.sheet_name
+      username_header          = var.username_header
+      password_header          = var.password_header
+      portal_hostname          = var.portal_hostname
+      idm_hostname             = var.idm_hostname
+      automated_sheet_password = aws_ssm_parameter.automated_sheet_password.name
+      awslogs_group            = local.awslogs_group,
+      awslogs_region           = data.aws_region.current.name
     }
   )
 }
@@ -208,8 +204,8 @@ resource "aws_cloudwatch_log_group" "ecs" {
 
 # Systems Manager parameter 
 
-resource "aws_ssm_parameter" "sheet_password" {
-  name  = "${var.app_name}-${var.environment}-sheet-password"
+resource "aws_ssm_parameter" "automated_sheet_password" {
+  name  = "${var.app_name}-${var.environment}-automated-sheet-password"
   type  = "SecureString"
   value = "set_manually_after_creation"
 
