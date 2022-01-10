@@ -173,14 +173,11 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, clien
 		return fmt.Errorf("failed sorting %s after synchronizing sheet to MACFin users: %s", automatedSheet, err)
 	}
 
-	if numRows > initialNumRows || len(rowsToDelete) > 0 {
-		// automated sheet changed
-		err = uploadFile(f, input.Bucket, input.Key, client)
-		if err != nil {
-			return fmt.Errorf("Error uploading file after synchronizing: %s", err)
-		}
-		log.Printf("successfully uploaded file to s3://%s/%s after syncrhonization", input.Bucket, input.Key)
+	err = uploadFile(f, input.Bucket, input.Key, client)
+	if err != nil {
+		return fmt.Errorf("Error uploading file after synchronizing: %s", err)
 	}
+	log.Printf("successfully uploaded file to s3://%s/%s after syncrhonization", input.Bucket, input.Key)
 
 	return nil
 }
