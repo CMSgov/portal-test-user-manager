@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -13,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -29,12 +33,15 @@ const (
 	headingMACFinUsername  = "User"
 	headinggMACFinPassword = "Password"
 
-	sheetNamePasswordManager        = "PasswordManager"
-	headingPasswordManagerUser      = "User"
-	headingPasswordManagerPassword  = "Password"
-	headingPasswordManagerPrevious  = "Previous"
-	headingPasswordManagerTimestamp = "Timestamp"
+	sheetNamePasswordManager = "PasswordManager"
 )
+
+var headings = map[Column]string{
+	ColUser:      "User",
+	ColPassword:  "Password",
+	ColPrevious:  "Previous",
+	ColTimestamp: "Timestamp",
+}
 
 func cn(col, row int) string {
 	name, err := excelize.CoordinatesToCellName(col, row, false)
@@ -42,6 +49,56 @@ func cn(col, row int) string {
 		panic(err)
 	}
 	return name
+}
+
+func verifyNewPasswordIsUploaded(fc *FakeS3Client, contents []byte) error {
+	uploadedFp, err := excelize.OpenFile(fc.LocalPath)
+	if err != nil {
+		return err
+	}
+
+	currFp, err := excelize.OpenReader(bytes.NewReader(contents))
+	if err != nil {
+		return err
+	}
+
+	uploadedRows, err := uploadedFp.GetRows(fc.AutomatedSheetName)
+	if err != nil {
+		return err
+	}
+	currentRows, err := currFp.GetRows(fc.AutomatedSheetName)
+	if err != nil {
+		return err
+	}
+
+	colUser := fc.AutomatedSheetColNameToIndex[ColUser]
+	colPassword := fc.AutomatedSheetColNameToIndex[ColPassword]
+	colPrevious := fc.AutomatedSheetColNameToIndex[ColPrevious]
+	upUserToPassword := make(map[string]string, 0)
+	for _, upr := range uploadedRows[fc.RowOffset:] {
+		upUserToPassword[upr[colUser]] = upr[colPassword]
+	}
+
+	numNewPasswords := 0
+
+	for _, cr := range currentRows[fc.RowOffset:] {
+		user := cr[colUser]
+		if pw, ok := upUserToPassword[user]; !ok {
+			// new user with new password
+			if cr[colPassword] != cr[colPrevious] {
+				numNewPasswords++
+			}
+
+		} else if pw != cr[colPassword] {
+			// new password for existing user
+			numNewPasswords++
+		}
+	}
+	if numNewPasswords > 1 {
+		fc.SkippedUpload = true
+	}
+
+	return nil
 }
 
 const (
@@ -62,6 +119,8 @@ const (
 	// whatever the redirect is.
 	xsrfRedirectPath = "/portal/set-xsrf"
 )
+
+type currentFilePath string
 
 type session struct {
 	username  string
@@ -250,13 +309,13 @@ var testCases = []TestCase{
 				"chris", "foo", "", 20 * Day,
 			},
 			{
-				"leslie", newPasswordMarker, "bar", 0,
+				"chuck", newPasswordMarker, "y", 0,
 			},
 			{
 				"james", "baz", "", -20 * Day,
 			},
 			{
-				"chuck", newPasswordMarker, "y", 0,
+				"leslie", newPasswordMarker, "bar", 0,
 			},
 		},
 		MACFinIn: []MACFinRow{
@@ -394,10 +453,10 @@ var testCases = []TestCase{
 		PasswordManagerIn: []PasswordManagerRow{},
 		PasswordManagerOut: []PasswordManagerRow{
 			{
-				"james", newPasswordMarker, "baz", 0,
+				"chris", newPasswordMarker, "foo", 0,
 			},
 			{
-				"chris", newPasswordMarker, "foo", 0,
+				"james", newPasswordMarker, "baz", 0,
 			},
 			{
 				"leslie", newPasswordMarker, "bar", 0,
@@ -512,211 +571,320 @@ var testCases = []TestCase{
 	},
 }
 
+type FakeS3Client struct {
+	Bucket, Key                  string
+	LocalPath                    string
+	AutomatedSheetName           string
+	AutomatedSheetColNameToIndex map[Column]int
+	RowOffset                    int
+	SkippedUpload                bool
+}
+
+func (fc *FakeS3Client) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	if aws.StringValue(params.Bucket) != fc.Bucket {
+		return nil, fmt.Errorf("expected bucket %s; got %s", aws.StringValue(params.Bucket), fc.Bucket)
+	}
+	if aws.StringValue(params.Key) != fc.Key {
+		return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), fc.Key)
+	}
+
+	f, err := os.Open(fc.LocalPath)
+	if err != nil {
+		return nil, fmt.Errorf("Error downloading s3 object: %s", err)
+	}
+	return &s3.GetObjectOutput{
+		Body: f,
+	}, nil
+}
+
+func (fc *FakeS3Client) PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	if aws.StringValue(params.Bucket) != fc.Bucket {
+		return nil, fmt.Errorf("expected bucket %s; got %s", aws.StringValue(params.Bucket), fc.Bucket)
+	}
+	if aws.StringValue(params.Key) != fc.Key {
+		return nil, fmt.Errorf("expected key %s; got %s", aws.StringValue(params.Key), fc.Key)
+	}
+
+	contents, err := io.ReadAll(params.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// verify every password rotation has been uploaded except for, at most, one
+	// compare uploaded file (fc.LocalPath) and current file (params.Body)
+	err = verifyNewPasswordIsUploaded(fc, contents)
+	if err != nil {
+		return nil, fmt.Errorf("Error while checking for skipped file uploads: %s", err)
+	}
+
+	f, err := os.Create(fc.LocalPath)
+	if err != nil {
+		return nil, fmt.Errorf("Error uploading file: %s", err)
+	}
+	defer f.Close()
+	n, err := io.Copy(f, bytes.NewReader(contents))
+	if err != nil {
+		return nil, fmt.Errorf("Error uploading file %s: %s", fc.LocalPath, err)
+	}
+
+	log.Printf("opened %s (%d bytes) for upload to s3://%s/%s", fc.LocalPath, n, fc.Bucket, fc.Key)
+
+	return nil, nil
+}
+
+type ColumnArrangement struct {
+	Name    string
+	Columns map[Column]int
+}
+
+var columnArrangements = []ColumnArrangement{
+	{
+		Name: "Normal",
+		Columns: map[Column]int{
+			ColUser: 0, ColPassword: 1, ColPrevious: 2, ColTimestamp: 3,
+		},
+	},
+	{
+		Name: "Reverse",
+		Columns: map[Column]int{
+			ColUser: 3, ColPassword: 2, ColPrevious: 1, ColTimestamp: 0,
+		},
+	},
+	{
+		Name: "User at end",
+		Columns: map[Column]int{
+			ColUser: 3, ColPassword: 0, ColPrevious: 1, ColTimestamp: 2,
+		},
+	},
+}
+
 func TestRotate(t *testing.T) {
 	for _, tc := range testCases {
-		t.Run(tc.Name, func(t *testing.T) {
-			dir, err := os.MkdirTemp(os.TempDir(), "test-user-manager")
-			if err != nil {
-				t.Fatalf("Error making temp dir: %s", err)
-			}
-			log.Printf("Created %s", dir)
-			defer os.RemoveAll(dir)
-			filename := path.Join(dir, "in.xlsx")
-			f := excelize.NewFile()
+		for _, arr := range columnArrangements {
+			name := fmt.Sprintf("%s - Columns %s", tc.Name, arr.Name)
+			cols := arr.Columns
+			t.Run(name, func(t *testing.T) {
+				dir, err := os.MkdirTemp(os.TempDir(), "macfin")
+				if err != nil {
+					t.Fatalf("Error making temp dir: %s", err)
+				}
+				log.Printf("Created %s", dir)
+				defer os.RemoveAll(dir)
+				filename := path.Join(dir, localS3Filename)
+				f := excelize.NewFile()
 
-			f.SetSheetName("Sheet1", sheetNameMACFin)
-			f.NewSheet(sheetNamePasswordManager)
+				f.SetSheetName("Sheet1", sheetNameMACFin)
+				f.NewSheet(sheetNamePasswordManager)
 
-			err = f.SetSheetRow(sheetNameMACFin, "A1", &[]string{
-				"Module", "User_T", "Region", "State", headingMACFinUsername, headinggMACFinPassword,
-			})
-			if err != nil {
-				panic(err)
-			}
-			for idx, row := range tc.MACFinIn {
-				err := f.SetSheetRow(sheetNameMACFin, fmt.Sprintf("A%d", 2+idx), &[]string{
-					"a", "b", "c", "d", row.Username, row.Password,
+				err = f.SetSheetRow(sheetNameMACFin, "A1", &[]string{
+					"Module", "User_T", "Region", "State", headingMACFinUsername, headinggMACFinPassword,
 				})
 				if err != nil {
 					panic(err)
 				}
-			}
-
-			err = f.SetSheetRow(sheetNamePasswordManager, "A1", &[]string{
-				headingPasswordManagerUser,
-				headingPasswordManagerPassword,
-				headingPasswordManagerPrevious,
-				headingPasswordManagerTimestamp,
-			})
-			if err != nil {
-				panic(err)
-			}
-			for idx, row := range tc.PasswordManagerIn {
-				err := f.SetSheetRow(sheetNamePasswordManager, fmt.Sprintf("A%d", 2+idx), &[]string{
-					row.Username, row.Password, row.Previous, format(row.Timestamp),
-				})
-				if err != nil {
-					panic(err)
-				}
-			}
-
-			f.SaveAs(filename)
-
-			handler := &AuthServer{
-				UserToPassword: make(map[string]string),
-				Errors:         tc.ServerErrors,
-			}
-			for _, row := range tc.PasswordManagerIn {
-				handler.UserToPassword[row.Username] = row.Password
-			}
-			if tc.UntrackedPasswords != nil {
-				for username, password := range tc.UntrackedPasswords {
-					handler.UserToPassword[strings.ToLower(username)] = password
-				}
-			}
-			server := &http.Server{
-				Addr:    ":3398",
-				Handler: handler,
-			}
-			go func() {
-				log.Printf("Server stopped: %s", server.ListenAndServe())
-			}()
-
-			input := &Input{
-				UsernameHeader:         headingMACFinUsername,
-				PasswordHeader:         headinggMACFinPassword,
-				Filename:               filename,
-				AutomatedSheetPassword: "asfas",
-				AutomatedSheetColNameToIndex: map[Column]int{
-					ColUser: 0, ColPassword: 1, ColPrevious: 2, ColTimestamp: 3},
-				RowOffset: 1,
-				SheetGroups: map[Environment]SheetGroup{
-					dev: {
-						AutomatedSheetName: "PasswordManager",
-						SheetName:          sheetNameMACFin,
-					},
-				},
-			}
-
-			envToPortal := map[Environment]*Portal{
-				dev: {
-					Hostname:    portalServer,
-					IDMHostname: idmServer,
-					Scheme:      "http://",
-				},
-			}
-
-			err = rotate(input, envToPortal)
-			if err != nil {
-				t.Fatalf("Error running rotate(): %s", err)
-			}
-
-			server.Shutdown(context.Background())
-
-			f, err = excelize.OpenFile(filename)
-			if err != nil {
-				t.Fatalf("Error reopening spreadsheet: %s", err)
-			}
-
-			pmRows, err := f.GetRows(sheetNamePasswordManager)
-			if err != nil {
-				t.Fatalf("Error getting Password Manager rows: %s", err)
-			}
-			if len(pmRows) < len(tc.PasswordManagerOut) {
-				log.Fatalf("%s: Expected %d rows but got %d",
-					sheetNamePasswordManager, len(tc.PasswordManagerOut), len(pmRows))
-			}
-			userToPassword := map[string]string{}
-			for rowIdx, expected := range tc.PasswordManagerOut {
-				got := pmRows[rowIdx+1]
-				if expected.Username != got[0] {
-					t.Fatalf("%s Row %d: expected Username=%s but got Username=%s",
-						sheetNamePasswordManager, rowIdx+1, expected.Username, got[0])
-				}
-				// If the password has changed, we can't predict what it
-				// will be, so just check that it matches what was sent to
-				// the server.
-				newPassword, ok := handler.UserToNewPassword[expected.Username]
-				if ok {
-					if expected.Password != newPasswordMarker {
-						t.Fatalf("%s's password was changed unexpectedly", expected.Username)
-					} else if newPassword != got[1] {
-						t.Fatalf("%s Row %d: new password recorded as %q but sent to server as %q",
-							sheetNamePasswordManager, rowIdx+1, got[1], newPassword)
+				for idx, row := range tc.MACFinIn {
+					err := f.SetSheetRow(sheetNameMACFin, fmt.Sprintf("A%d", 2+idx), &[]string{
+						"a", "b", "c", "d", row.Username, row.Password,
+					})
+					if err != nil {
+						panic(err)
 					}
-					delete(handler.UserToNewPassword, expected.Username)
-				} else if expected.Password == newPasswordMarker {
-					t.Fatalf("Expected a password change for %s but the server did not get one", expected.Username)
 				}
-				if expected.Previous != got[2] {
-					t.Fatalf("%s Row %d: expected Previous=%s but got Previous=%s",
-						sheetNamePasswordManager, rowIdx+1, expected.Previous, got[2])
-				}
-				expectedTimestamp := now.Add(expected.Timestamp)
-				gotTimestamp, err := time.Parse(time.UnixDate, got[3])
-				if err != nil {
-					t.Fatalf("%s Row %d: error parsing date %q: %s", sheetNamePasswordManager, rowIdx+1, got[3], err)
-				}
-				diff := expectedTimestamp.Sub(gotTimestamp)
-				maxDiff := time.Hour
-				if diff < -maxDiff || diff > maxDiff {
-					t.Fatalf("%s Row %d: expected Timestamp~=%s but got Timestamp=%s",
-						sheetNamePasswordManager, rowIdx+1, expectedTimestamp, gotTimestamp)
-				}
-				userToPassword[got[0]] = got[1]
-			}
-			if len(handler.UserToNewPassword) != 0 {
-				t.Fatalf("Passwords were updated for users not in the manager: %v", handler.UserToNewPassword)
-			}
 
-			macFinUsers := map[string]struct{}{}
-			for _, row := range tc.MACFinIn {
-				if row.Username != "" {
-					macFinUsers[row.Username] = struct{}{}
+				h := make([]string, 4)
+				h[cols[ColUser]] = headings[ColUser]
+				h[cols[ColPassword]] = headings[ColPassword]
+				h[cols[ColPrevious]] = headings[ColPrevious]
+				h[cols[ColTimestamp]] = headings[ColTimestamp]
+				err = f.SetSheetRow(sheetNamePasswordManager, "A1", &h)
+				if err != nil {
+					panic(err)
 				}
-			}
-			macFinRows, err := f.GetRows(sheetNameMACFin)
-			if err != nil {
-				t.Fatalf("Error getting MACFin rows: %s", err)
-			}
-			for idx, row := range macFinRows[1:] {
-				if len(row) < 6 {
-					continue // short, invalid row
+				for idx, row := range tc.PasswordManagerIn {
+					data := make([]string, 4)
+					data[cols[ColUser]] = row.Username
+					data[cols[ColPassword]] = row.Password
+					data[cols[ColPrevious]] = row.Previous
+					data[cols[ColTimestamp]] = format(row.Timestamp)
+					err := f.SetSheetRow(sheetNamePasswordManager, fmt.Sprintf("A%d", 2+idx), &data)
+					if err != nil {
+						panic(err)
+					}
 				}
-				username := row[4]
-				password := row[5]
-				expectedPassword, ok := userToPassword[strings.ToLower(username)]
-				if !ok {
-					t.Fatalf("%s row %d: user %q is not in password manager",
-						sheetNameMACFin, idx+1, username)
-				} else if expectedPassword != password {
-					t.Fatalf("%s row %d: Expected password %q but got %q",
-						sheetNameMACFin, idx+1, expectedPassword, password)
+
+				f.SaveAs(filename)
+
+				handler := &AuthServer{
+					UserToPassword: make(map[string]string),
+					Errors:         tc.ServerErrors,
 				}
-				delete(macFinUsers, username)
-			}
-			if len(macFinUsers) != 0 {
-				t.Fatalf("Users are now missing from the MACFin sheet: %v", macFinUsers)
-			}
-			// Make sure all login sessions were terminated.
-			for _, sess := range handler.PortalSessions {
-				if tc.ServerErrors[sess.username] != "" {
-					// When there is an error, we don't log out.
-					continue
+				for _, row := range tc.PasswordManagerIn {
+					handler.UserToPassword[row.Username] = row.Password
 				}
-				if !sess.loggedOut {
-					t.Fatalf("Session %#v is still logged in", sess)
+				if tc.UntrackedPasswords != nil {
+					for username, password := range tc.UntrackedPasswords {
+						handler.UserToPassword[strings.ToLower(username)] = password
+					}
 				}
-			}
-			for _, sess := range handler.IDMSessions {
-				if tc.ServerErrors[sess.username] != "" {
-					// When there is an error, we don't log out.
-					continue
+				server := &http.Server{
+					Addr:    ":3398",
+					Handler: handler,
 				}
-				if !sess.loggedOut {
-					t.Fatalf("Session %#v is still logged in", sess)
+				go func() {
+					log.Printf("Server stopped: %s", server.ListenAndServe())
+				}()
+				input := &Input{
+					UsernameHeader:               headingMACFinUsername,
+					PasswordHeader:               headinggMACFinPassword,
+					Bucket:                       "macfin",
+					Key:                          "pre1/pre2/macfin-dev-lbk-s3.xlsx",
+					AutomatedSheetPassword:       "asfas",
+					AutomatedSheetColNameToIndex: cols,
+					RowOffset:                    1,
+					SheetGroups: map[Environment]SheetGroup{
+						dev: {
+							AutomatedSheetName: "PasswordManager",
+							SheetName:          sheetNameMACFin,
+						},
+					},
 				}
-			}
-		})
+
+				envToPortal := map[Environment]*Portal{
+					dev: {
+						Hostname:    portalServer,
+						IDMHostname: idmServer,
+						Scheme:      "http://",
+					},
+				}
+
+				fc := &FakeS3Client{
+					Bucket:                       input.Bucket,
+					Key:                          input.Key,
+					LocalPath:                    filename,
+					AutomatedSheetName:           input.SheetGroups[dev].AutomatedSheetName,
+					AutomatedSheetColNameToIndex: input.AutomatedSheetColNameToIndex,
+					RowOffset:                    input.RowOffset,
+				}
+				err = rotate(input, envToPortal, fc)
+				server.Shutdown(context.Background())
+
+				if err != nil {
+					t.Fatalf("Error running rotate(): %s", err)
+				}
+
+				if fc.SkippedUpload {
+					t.Errorf("Skipped file upload to %s after a password rotation", fc.LocalPath)
+				}
+
+				f, err = excelize.OpenFile(filename)
+				if err != nil {
+					t.Fatalf("Error reopening spreadsheet: %s", err)
+				}
+
+				pmRows, err := f.GetRows(sheetNamePasswordManager)
+				if err != nil {
+					t.Fatalf("Error getting Password Manager rows: %s", err)
+				}
+				if len(pmRows) < len(tc.PasswordManagerOut) {
+					log.Fatalf("%s: Expected %d rows but got %d",
+						sheetNamePasswordManager, len(tc.PasswordManagerOut), len(pmRows))
+				}
+				userToPassword := map[string]string{}
+				for rowIdx, expected := range tc.PasswordManagerOut {
+					gotRow := pmRows[rowIdx+1]
+					gotUsername := gotRow[input.AutomatedSheetColNameToIndex[ColUser]]
+					gotPassword := gotRow[input.AutomatedSheetColNameToIndex[ColPassword]]
+					gotPrevious := gotRow[input.AutomatedSheetColNameToIndex[ColPrevious]]
+					gotTS := gotRow[input.AutomatedSheetColNameToIndex[ColTimestamp]]
+					if expected.Username != gotUsername {
+						t.Fatalf("%s Row %d: expected Username=%s but got Username=%s",
+							sheetNamePasswordManager, rowIdx+1, expected.Username, gotUsername)
+					}
+					// If the password has changed, we can't predict what it
+					// will be, so just check that it matches what was sent to
+					// the server.
+					newPassword, ok := handler.UserToNewPassword[expected.Username]
+					if ok {
+						if expected.Password != newPasswordMarker {
+							t.Fatalf("%s's password was changed unexpectedly", expected.Username)
+						} else if newPassword != gotPassword {
+							t.Fatalf("%s Row %d: new password recorded as %q but sent to server as %q",
+								sheetNamePasswordManager, rowIdx+1, gotPassword, newPassword)
+						}
+						delete(handler.UserToNewPassword, expected.Username)
+					} else if expected.Password == newPasswordMarker {
+						t.Fatalf("Expected a password change for %s but the server did not get one", expected.Username)
+					}
+					if expected.Previous != gotPrevious {
+						t.Fatalf("%s Row %d: expected Previous=%s but got Previous=%s",
+							sheetNamePasswordManager, rowIdx+1, expected.Previous, gotPrevious)
+					}
+					expectedTimestamp := now.Add(expected.Timestamp)
+					gotTimestamp, err := time.Parse(time.UnixDate, gotTS)
+					if err != nil {
+						t.Fatalf("%s Row %d: error parsing date %q: %s", sheetNamePasswordManager, rowIdx+1, gotTimestamp, err)
+					}
+					diff := expectedTimestamp.Sub(gotTimestamp)
+					maxDiff := time.Hour
+					if diff < -maxDiff || diff > maxDiff {
+						t.Fatalf("%s Row %d: expected Timestamp~=%s but got Timestamp=%s",
+							sheetNamePasswordManager, rowIdx+1, expectedTimestamp, gotTS)
+					}
+					userToPassword[gotUsername] = gotPassword
+				}
+				if len(handler.UserToNewPassword) != 0 {
+					t.Fatalf("Passwords were updated for users not in the manager: %v", handler.UserToNewPassword)
+				}
+
+				macFinUsers := map[string]struct{}{}
+				for _, row := range tc.MACFinIn {
+					if row.Username != "" {
+						macFinUsers[row.Username] = struct{}{}
+					}
+				}
+				macFinRows, err := f.GetRows(sheetNameMACFin)
+				if err != nil {
+					t.Fatalf("Error getting MACFin rows: %s", err)
+				}
+				for idx, row := range macFinRows[1:] {
+					if len(row) < 6 {
+						continue // short, invalid row
+					}
+					username := row[4]
+					password := row[5]
+					expectedPassword, ok := userToPassword[strings.ToLower(username)]
+					if !ok {
+						t.Fatalf("%s row %d: user %q is not in password manager",
+							sheetNameMACFin, idx+1, username)
+					} else if expectedPassword != password {
+						t.Fatalf("%s row %d: Expected password %q but got %q",
+							sheetNameMACFin, idx+1, expectedPassword, password)
+					}
+					delete(macFinUsers, username)
+				}
+				if len(macFinUsers) != 0 {
+					t.Fatalf("Users are now missing from the MACFin sheet: %v", macFinUsers)
+				}
+				// Make sure all login sessions were terminated.
+				for _, sess := range handler.PortalSessions {
+					if tc.ServerErrors[sess.username] != "" {
+						// When there is an error, we don't log out.
+						continue
+					}
+					if !sess.loggedOut {
+						t.Fatalf("Session %#v is still logged in", sess)
+					}
+				}
+				for _, sess := range handler.IDMSessions {
+					if tc.ServerErrors[sess.username] != "" {
+						// When there is an error, we don't log out.
+						continue
+					}
+					if !sess.loggedOut {
+						t.Fatalf("Session %#v is still logged in", sess)
+					}
+				}
+			})
+		}
 	}
 }

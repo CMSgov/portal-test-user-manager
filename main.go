@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"os"
+	"path"
 	"time"
 
 	"github.com/xuri/excelize/v2"
@@ -32,7 +33,9 @@ const (
 )
 
 type Input struct {
-	Filename                     string
+	Bucket                       string
+	Key                          string
+	SheetName                    string
 	UsernameHeader               string
 	PasswordHeader               string
 	AutomatedSheetPassword       string
@@ -67,7 +70,7 @@ func portalClient() *http.Client {
 	}
 }
 
-func resetPasswords(f *excelize.File, input *Input, portal *Portal, env Environment) (err error) {
+func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3ClientAPI, env Environment) (err error) {
 	automatedSheet := input.SheetGroups[env].AutomatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
@@ -148,7 +151,13 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, env Environm
 					sheetName, toSheetCoord(i+rowOffset), name, err)
 			}
 
-			log.Printf("%s: rotation complete", row[colUser])
+			log.Printf("%s: rotation complete", name)
+
+			err = uploadFile(f, input.Bucket, input.Key, s3Client)
+			if err != nil {
+				return fmt.Errorf("Error uploading file after successful rotation: %s", err)
+			}
+			log.Printf("successfully uploaded file after rotating password for MACFin user %s", name)
 		}
 	}
 
@@ -158,14 +167,14 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, env Environm
 	return nil
 }
 
-func rotate(input *Input, envToPortal map[Environment]*Portal) error {
-	f, err := excelize.OpenFile(input.Filename)
+func rotate(input *Input, envToPortal map[Environment]*Portal, client S3ClientAPI) error {
+	f, err := downloadFile(input, client)
 	if err != nil {
 		return err
 	}
+	defer os.RemoveAll(path.Dir(f.Path))
 
 	for env, portal := range envToPortal {
-
 		// true means "block action"
 		err = f.ProtectSheet(input.SheetGroups[env].AutomatedSheetName, &excelize.FormatSheetProtection{
 			Password:            input.AutomatedSheetPassword,
@@ -176,22 +185,22 @@ func rotate(input *Input, envToPortal map[Environment]*Portal) error {
 			return fmt.Errorf("failed to protect %s sheet", input.SheetGroups[env].AutomatedSheetName)
 		}
 
-		err = syncPasswordManagerUsersToMACFinUsers(f, input, env)
+		err = syncPasswordManagerUsersToMACFinUsers(f, input, client, env)
 		if err != nil {
 			return err
 		}
 
-		err = resetPasswords(f, input, portal, env)
+		err = resetPasswords(f, input, portal, client, env)
 		if err != nil {
 			return err
 		}
 
-		err = updateMACFinUsers(f, input, env)
+		err = updateMACFinUsers(f, input, client, env)
 		if err != nil {
 			return err
 		}
+
 	}
-
 	return nil
 }
 
@@ -219,7 +228,8 @@ func main() {
 	input := &Input{
 		UsernameHeader:         os.Getenv("USERNAMEHEADER"),
 		PasswordHeader:         os.Getenv("PASSWORDHEADER"),
-		Filename:               os.Getenv("FILENAME"),
+		Bucket:                 os.Getenv("BUCKET"),
+		Key:                    os.Getenv("KEY"),
 		AutomatedSheetPassword: os.Getenv("AUTOMATEDSHEETPASSWORD"),
 		AutomatedSheetColNameToIndex: map[Column]int{
 			ColUser: 0, ColPassword: 1, ColPrevious: 2, ColTimestamp: 3},
@@ -240,7 +250,12 @@ func main() {
 		},
 	}
 
-	err := rotate(input, envToPortal)
+	client, err := createS3Client(region)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = rotate(input, envToPortal, client)
 	if err != nil {
 		log.Fatal(err)
 	}

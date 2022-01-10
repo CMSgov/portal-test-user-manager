@@ -56,7 +56,7 @@ func getMACFinUsers(f *excelize.File, input *Input, env Environment) ([]username
 	sheetName := input.SheetGroups[env].SheetName
 	rows, err := f.GetRows(sheetName)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", sheetName, input.Filename, err)
+		return nil, fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", sheetName, input.Bucket, input.Key, err)
 	}
 
 	users := []usernameAndPassword{}
@@ -82,7 +82,7 @@ func getManagedUsers(f *excelize.File, input *Input, env Environment) (map[strin
 	automatedSheet := input.SheetGroups[env].AutomatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting rows from %s in %s: %s", automatedSheet, input.Filename, err)
+		return nil, fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", automatedSheet, input.Bucket, input.Key, err)
 	}
 
 	rowOffset := input.RowOffset
@@ -101,7 +101,7 @@ func getManagedUsers(f *excelize.File, input *Input, env Environment) (map[strin
 }
 
 // Sync PasswordManager usernames with MACFin users
-func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, env Environment) error {
+func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI, env Environment) error {
 	macFinUsersToPasswords, err := getMACFinUsers(f, input, env)
 	if err != nil {
 		return err
@@ -113,7 +113,8 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, env E
 	}
 
 	rowOffset := input.RowOffset
-	numRows := len(userToPasswordRow) + rowOffset
+	initialNumRows := len(userToPasswordRow) + rowOffset
+	numRows := initialNumRows
 	automatedSheet := input.SheetGroups[env].AutomatedSheetName
 
 	usersFound := map[string]struct{}{}
@@ -124,17 +125,17 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, env E
 		}
 		usersFound[up.Username] = struct{}{}
 		if _, ok := userToPasswordRow[up.Username]; !ok {
-			values := map[int]string{
-				input.AutomatedSheetColNameToIndex[ColUser]:      up.Username,
-				input.AutomatedSheetColNameToIndex[ColPassword]:  up.Password,
-				input.AutomatedSheetColNameToIndex[ColPrevious]:  up.Password,
-				input.AutomatedSheetColNameToIndex[ColTimestamp]: "Rotate Now",
+			values := map[Column]string{
+				ColUser:      up.Username,
+				ColPassword:  up.Password,
+				ColPrevious:  up.Password,
+				ColTimestamp: "Rotate Now",
 			}
 			// write new row
 			for name, idx := range input.AutomatedSheetColNameToIndex {
-				err := writeCell(f, automatedSheet, idx, numRows, values[int(name)])
+				err := writeCell(f, automatedSheet, idx, numRows, values[name])
 				if err != nil {
-					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", up.Username, automatedSheet, input.Filename, err)
+					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", up.Username, automatedSheet, f.Path, err)
 				}
 			}
 			numRows++
@@ -159,14 +160,25 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, env E
 		rowToDelete := toSheetCoord(rowsToDelete[idx] + rowOffset)
 		err := f.RemoveRow(automatedSheet, rowToDelete)
 		if err != nil {
-			return fmt.Errorf("failed removing row %d from %s sheet in file %s: %s", rowToDelete, automatedSheet, input.Filename, err)
+			return fmt.Errorf("failed removing row %d from %s sheet in file %s: %s", rowToDelete, automatedSheet, f.Path, err)
 		}
 	}
 
 	err = f.Save()
 	if err != nil {
-		return fmt.Errorf("failed saving %s after synchronizing automated sheet users to MACFin users: %s", input.Filename, err)
+		return fmt.Errorf("failed saving file %s after synchronizing automated sheet users to MACFin users: %s", f.Path, err)
 	}
+
+	err = sortRows(f, input, automatedSheet)
+	if err != nil {
+		return fmt.Errorf("failed sorting %s after synchronizing sheet to MACFin users: %s", automatedSheet, err)
+	}
+
+	err = uploadFile(f, input.Bucket, input.Key, client)
+	if err != nil {
+		return fmt.Errorf("Error uploading file after synchronizing: %s", err)
+	}
+	log.Printf("successfully uploaded file to s3://%s/%s after syncrhonization", input.Bucket, input.Key)
 
 	return nil
 }
@@ -226,8 +238,36 @@ func copyCell(f *excelize.File, automatedSheetName string, srcX, srcY, destX, de
 	return nil
 }
 
+func sortRows(f *excelize.File, input *Input, sheetname string) error {
+	rows, err := f.GetRows(sheetname)
+	if err != nil {
+		return err
+	}
+
+	colUser := input.AutomatedSheetColNameToIndex[ColUser]
+
+	sort.Slice(rows[input.RowOffset:], func(i, j int) bool {
+		return rows[input.RowOffset+i][colUser] < rows[input.RowOffset+j][colUser]
+	})
+
+	// write sorted rows to automatedSheet
+	for idx, r := range rows[input.RowOffset:] {
+		cellName := fmt.Sprintf("A%d", 2+idx)
+		err = f.SetSheetRow(sheetname, cellName, &r)
+		if err != nil {
+			return fmt.Errorf("Error writing sorted sheet: %s", err)
+		}
+	}
+
+	err = f.Save()
+	if err != nil {
+		return fmt.Errorf("Error saving sheet %s: %s", sheetname, err)
+	}
+	return nil
+}
+
 // Write new password to password column in the MACFin sheet
-func updateMACFinUsers(f *excelize.File, input *Input, env Environment) error {
+func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI, env Environment) error {
 	userToPasswordRow, err := getManagedUsers(f, input, env)
 	if err != nil {
 		return err
@@ -239,7 +279,6 @@ func updateMACFinUsers(f *excelize.File, input *Input, env Environment) error {
 		return err
 	}
 
-	numPasswordsUpdated := 0
 	headerNameToXCoord := getHeaderToXCoord(rows[0])
 	userX := headerNameToXCoord[input.UsernameHeader]
 	passwordX := headerNameToXCoord[input.PasswordHeader]
@@ -260,12 +299,17 @@ func updateMACFinUsers(f *excelize.File, input *Input, env Environment) error {
 				if err != nil {
 					return fmt.Errorf("Error setting new password for user %s in sheet %s in row %d: %s", user, sheetName, toSheetCoord(i+rowOffset), err)
 				}
-				numPasswordsUpdated++
 			}
 		} else {
 			return fmt.Errorf("macFin user %s missing from PasswordManager users; failed to update sheet %s with new passwords", user, sheetName)
 		}
 	}
+
+	err = uploadFile(f, input.Bucket, input.Key, client)
+	if err != nil {
+		return fmt.Errorf("Error uploading file: %s", err)
+	}
+	log.Printf("successfully uploaded file to s3://%s/%s after updating sheet %s", input.Bucket, input.Key, sheetName)
 
 	return nil
 }
