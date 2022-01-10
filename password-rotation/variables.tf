@@ -39,7 +39,7 @@ variable "ecs_subnet_ids" {
 variable "schedule_task_expression" {
   type        = string
   description = "Cron based schedule task to run on a cadence"
-  default     = "0 3 1 * ? *" // monthly on the first day of the month at 3am
+  default     = "0 8 1 * ? *" // monthly on the first day of the month at 8am UTC (3am UTC-5)
 }
 
 variable "event_rule_enabled" {
