@@ -87,7 +87,6 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3C
 	colPassword := input.AutomatedSheetColNameToIndex[ColPassword]
 	colPrevious := input.AutomatedSheetColNameToIndex[ColPrevious]
 	colTimestamp := input.AutomatedSheetColNameToIndex[ColTimestamp]
-	sheetName := input.SheetGroups[env].SheetName
 
 	var lastRotated time.Time
 
@@ -134,21 +133,21 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3C
 			err = copyCell(f, automatedSheet, colPassword, i+rowOffset, colPrevious, i+rowOffset)
 			if err != nil {
 				return fmt.Errorf("failed to write previous password %s to sheet %s, row %d for user %s: %s",
-					row[colPassword], sheetName, i+rowOffset, name, err)
+					row[colPassword], automatedSheet, i+rowOffset, name, err)
 			}
 
 			// write new password to password col
 			err := writeCell(f, automatedSheet, colPassword, i+rowOffset, newPassword)
 			if err != nil {
 				return fmt.Errorf("failed to write new password to sheet %s in row %d for user %s: %v; manually set password for user",
-					sheetName, toSheetCoord(i+rowOffset), name, err)
+					automatedSheet, toSheetCoord(i+rowOffset), name, err)
 			}
 			// set timestamp
 			ts := now.Format(time.UnixDate)
 			err = writeCell(f, automatedSheet, colTimestamp, i+rowOffset, ts)
 			if err != nil {
 				return fmt.Errorf("failed to write timestamp %s to sheet %s in row %d for user %s: %s", ts,
-					sheetName, toSheetCoord(i+rowOffset), name, err)
+					automatedSheet, toSheetCoord(i+rowOffset), name, err)
 			}
 
 			log.Printf("%s: rotation complete", name)
@@ -162,7 +161,7 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3C
 	}
 
 	log.Printf("total rotations in %s: %d success: %d  fail: %d  not rotated: %d total users: %d",
-		sheetName, numSuccess+numFail, numSuccess, numFail, numNoRotation, len(rows)-1)
+		automatedSheet, numSuccess+numFail, numSuccess, numFail, numNoRotation, len(rows)-1)
 
 	return nil
 }
