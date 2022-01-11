@@ -12,12 +12,20 @@ module "password_rotation" {
   schedule_task_expression = "cron(0/1 * * * ? *)"                                    // every 1 minute
   event_rule_enabled       = false
 
-  // TODO add real values 
-  s3_bucket          = "bharvey-test-same-account-bucket"
-  s3_key             = "example.txt"
-  sheet_name         = ""
-  username_header    = ""
-  password_header    = ""
-  portal_hostname    = ""
-  idm_hostname       = ""
+  s3_bucket       = "bharvey-test-same-account-bucket"
+  s3_key          = "example.txt"
+  username_header = "UserName"
+  password_header = "Password"
+
+  sheet_name_dev  = "Portal-DEV"
+  sheet_name_val  = "Portal-VAL"
+  sheet_name_prod = "Portal-PROD"
+
+  portal_hostname_dev  = "portaldev.cms.gov"
+  portal_hostname_val  = "portalval.cms.gov"
+  portal_hostname_prod = "portal.cms.gov"
+
+  idm_hostname_dev  = "test.idp.idm.cms.gov"
+  idm_hostname_val  = "impl.idp.idm.cms.gov"
+  idm_hostname_prod = "idp.idm.cms.gov"
 }

@@ -177,21 +177,32 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
 
   container_definitions = templatefile("${path.module}/container-definitions.json",
     {
-      app_name                 = var.app_name,
-      task_name                = var.task_name,
-      environment              = var.environment,
-      repo_url                 = var.repo_url
-      image_tag                = var.image_tag
+      app_name    = var.app_name,
+      task_name   = var.task_name,
+      environment = var.environment,
+      repo_url    = var.repo_url
+      image_tag   = var.image_tag
+
       s3_bucket                = var.s3_bucket,
       s3_key                   = var.s3_key,
-      sheet_name               = var.sheet_name
       username_header          = var.username_header
       password_header          = var.password_header
-      portal_hostname          = var.portal_hostname
-      idm_hostname             = var.idm_hostname
       automated_sheet_password = aws_ssm_parameter.automated_sheet_password.name
-      awslogs_group            = local.awslogs_group,
-      awslogs_region           = data.aws_region.current.name
+
+      sheet_name_dev  = var.sheet_name_dev
+      sheet_name_val  = var.sheet_name_val
+      sheet_name_prod = var.sheet_name_prod
+
+      portal_hostname_dev  = var.portal_hostname_dev
+      portal_hostname_val  = var.portal_hostname_val
+      portal_hostname_prod = var.portal_hostname_prod
+
+      idm_hostname_dev  = var.idm_hostname_dev
+      idm_hostname_val  = var.idm_hostname_val
+      idm_hostname_prod = var.idm_hostname_prod
+
+      awslogs_group  = local.awslogs_group,
+      awslogs_region = data.aws_region.current.name
     }
   )
 }

@@ -5,11 +5,17 @@
     "environment": [
       { "name": "BUCKET", "value": "${s3_bucket}" },
       { "name": "KEY", "value": "${s3_key}" },
-      { "name": "MACFINSHEETNAME", "value": "${sheet_name}" },
       { "name": "USERNAMEHEADER", "value": "${username_header}" },
       { "name": "PASSWORDHEADER", "value": "${password_header}" },
-      { "name": "PORTALHOSTNAME", "value": "${portal_hostname}" },
-      { "name": "IDMHOSTNAME", "value": "${idm_hostname}" }
+      { "name": "MACFINSHEETNAMEDEV", "value": "${sheet_name_dev}" },
+      { "name": "MACFINSHEETNAMEVAL", "value": "${sheet_name_val}" },
+      { "name": "MACFINSHEETNAMEPROD", "value": "${sheet_name_prod}" },
+      { "name": "PORTALHOSTNAMEDEV", "value": "${portal_hostname_dev}" },
+      { "name": "PORTALHOSTNAMEVAL", "value": "${portal_hostname_val}" },
+      { "name": "PORTALHOSTNAMEPROD", "value": "${portal_hostname_prod}" },
+      { "name": "IDMHOSTNAMEDEV", "value": "${idm_hostname_dev}" },
+      { "name": "IDMHOSTNAMEVAL", "value": "${idm_hostname_val}" },
+      { "name": "IDMHOSTNAMEPROD", "value": "${idm_hostname_prod}" }
     ],
     "secrets": [
       {

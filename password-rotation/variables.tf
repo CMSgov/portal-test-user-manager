@@ -58,11 +58,6 @@ variable "s3_key" {
   description = "The S3 key (path/filename) for the test user spreadsheet"
 }
 
-variable "sheet_name" {
-  type        = string
-  description = "Sheet name for the test user spreadsheet"
-}
-
 variable "username_header" {
   type        = string
   description = "Username header for the test user spreadsheet"
@@ -73,12 +68,48 @@ variable "password_header" {
   description = "Password header for the test user spreadsheet"
 }
 
-variable "portal_hostname" {
+variable "sheet_name_dev" {
   type        = string
-  description = "Hostname for the CMS Enterprise Portal"
+  description = "Sheet name for the dev test user spreadsheet"
 }
 
-variable "idm_hostname" {
+variable "sheet_name_val" {
   type        = string
-  description = "Hostname for CMS Enterprise Portal IDM"
+  description = "Sheet name for the val test user spreadsheet"
+}
+
+variable "sheet_name_prod" {
+  type        = string
+  description = "Sheet name for the prod test user spreadsheet"
+}
+
+
+variable "portal_hostname_dev" {
+  type        = string
+  description = "Hostname for the dev CMS Enterprise Portal"
+}
+
+variable "portal_hostname_val" {
+  type        = string
+  description = "Hostname for the val CMS Enterprise Portal"
+}
+
+variable "portal_hostname_prod" {
+  type        = string
+  description = "Hostname for the prod CMS Enterprise Portal"
+}
+
+variable "idm_hostname_dev" {
+  type        = string
+  description = "Hostname for dev CMS Enterprise Portal IDM"
+}
+
+variable "idm_hostname_val" {
+  type        = string
+  description = "Hostname for val CMS Enterprise Portal IDM"
+}
+
+variable "idm_hostname_prod" {
+  type        = string
+  description = "Hostname for prod CMS Enterprise Portal IDM"
 }
