@@ -77,6 +77,15 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3C
 		return err
 	}
 
+	sheetName := input.SheetGroups[env].SheetName
+	mcFinUsersToPasswordRow, err := getMACFinUsers(f, input, env)
+	mfRows, err := f.GetRows(sheetName)
+	if err != nil {
+		return err
+	}
+	headerNameToXCoord := getHeaderToXCoord(mfRows[0])
+	passwordXCoord := headerNameToXCoord[input.PasswordHeader]
+
 	var now time.Time
 
 	numSuccess := 0
@@ -151,6 +160,17 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3C
 			}
 
 			log.Printf("%s: rotation complete", name)
+
+			// update password for user in macFin sheet
+			if pwRow, ok := mcFinUsersToPasswordRow[name]; !ok {
+				return fmt.Errorf("macFin user %s missing from PasswordManager users; failed to update sheet %s with new password", name, sheetName)
+			} else {
+				err = writeCell(f, sheetName, passwordXCoord, pwRow.Row, newPassword)
+				if err != nil {
+					return fmt.Errorf("failed to write password for user %s to sheet %s in row %d: %s", name,
+						sheetName, toSheetCoord(pwRow.Row), err)
+				}
+			}
 
 			err = uploadFile(f, input.Bucket, input.Key, s3Client)
 			if err != nil {
