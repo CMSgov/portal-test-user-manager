@@ -79,6 +79,9 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3C
 
 	sheetName := input.SheetGroups[env].SheetName
 	mcFinUsersToPasswordRow, err := getMACFinUsers(f, input, env)
+	if err != nil {
+		return err
+	}
 	mfRows, err := f.GetRows(sheetName)
 	if err != nil {
 		return err
