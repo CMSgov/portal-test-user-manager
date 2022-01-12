@@ -23,6 +23,13 @@ const (
 )
 
 const (
+	ColUserHeading      = "Username"
+	ColPasswordHeading  = "Password"
+	ColPreviousHeading  = "Previous"
+	ColTimestampHeading = "Timestamp"
+)
+
+const (
 	maxPasswordAgeDays int = 30
 )
 
@@ -195,6 +202,11 @@ func rotate(input *Input, envToPortal map[Environment]*Portal, client S3ClientAP
 		return err
 	}
 	defer os.RemoveAll(path.Dir(f.Path))
+
+	err = validateSheets(f, input)
+	if err != nil {
+		return err
+	}
 
 	for env, portal := range envToPortal {
 		// true means "block action"

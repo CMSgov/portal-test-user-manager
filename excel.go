@@ -15,8 +15,109 @@ type PasswordRow struct {
 	Row      int
 }
 
+var ErrSheetDoesNotExist = errors.New("sheet does not exist")
+var ErrSheetIsEmpty = errors.New("sheet is empty; must include header row")
+var ErrSheetMissingHeader = errors.New("sheet does not contain expected header in top row")
+var ErrWrongNumberOfCols = errors.New("sheet has wrong number of cols")
+var ErrWrongColumnHeading = errors.New("wrong column heading for column")
+var ErrWrongSheetName = errors.New("invalid sheet name")
+
 func toSheetCoord(coord int) int {
 	return coord + 1
+}
+
+func contains(items []string, item string) bool {
+	for _, it := range items {
+		if it == item {
+			return true
+		}
+	}
+
+	return false
+}
+
+func validateSheetCols(f *excelize.File, input *Input, group SheetGroup, sheetName string) error {
+	if sheetName == group.SheetName {
+		// validate MACFin sheet cols
+		rows, err := f.GetRows(sheetName)
+		if err != nil {
+			return err
+		}
+		header := rows[0]
+		// check for username header
+		if !contains(header, input.UsernameHeader) {
+			log.Printf("sheet %s in file s3://%s/%s does not contain header %s in top row", sheetName, input.Bucket, input.Key, input.UsernameHeader)
+			return ErrSheetMissingHeader
+		}
+		// check for password header
+		if !contains(header, input.PasswordHeader) {
+			log.Printf("sheet %s in file s3://%s/%s does not contain header %s in top row", sheetName, input.Bucket, input.Key, input.PasswordHeader)
+			return ErrSheetMissingHeader
+		}
+	} else if sheetName == group.AutomatedSheetName {
+		// validate automated sheet cols
+		rows, err := f.GetRows(sheetName)
+		if err != nil {
+			return err
+		}
+		header := rows[0]
+		// check number of cols
+		if len(header) != len(input.AutomatedSheetColNameToIndex) {
+			log.Printf("Expected sheet %s to have %d cols; it has %d cols", sheetName, len(input.AutomatedSheetColNameToIndex), len(header))
+			return ErrWrongNumberOfCols
+		}
+		// check col headings and indexes
+		if header[ColUser] != ColUserHeading {
+			log.Printf("Expected %s in col %d; got %s", ColUserHeading, ColUser, header[ColUser])
+			return ErrWrongColumnHeading
+		}
+		if header[ColPassword] != ColPasswordHeading {
+			log.Printf("Expected %s in col %d; got %s", ColPasswordHeading, ColPassword, header[ColPassword])
+			return ErrWrongColumnHeading
+		}
+		if header[ColPrevious] != ColPreviousHeading {
+			log.Printf("Expected %s in col %d; got %s", ColPreviousHeading, ColPrevious, header[ColPrevious])
+			return ErrWrongColumnHeading
+		}
+		if header[ColTimestamp] != ColTimestampHeading {
+			log.Printf("Expected %s in col %d; got %s", ColTimestampHeading, ColTimestamp, header[ColTimestamp])
+			return ErrWrongColumnHeading
+		}
+	} else {
+		return ErrWrongSheetName
+	}
+	return nil
+}
+
+func validateSheets(f *excelize.File, input *Input) error {
+	sheetList := f.GetSheetList()
+	for _, group := range input.SheetGroups {
+		sheets := []string{group.SheetName, group.AutomatedSheetName}
+		for _, sheet := range sheets {
+			// check that sheet exists
+			if !contains(sheetList, sheet) {
+				log.Printf("sheet %s missing from file s3://%s/%s", sheet, input.Bucket, input.Key)
+				return ErrSheetDoesNotExist
+			}
+
+			rows, err := f.GetRows(sheet)
+			if err != nil {
+				return err
+			}
+
+			// check if sheet is empty
+			if len(rows) == 0 {
+				log.Printf("sheet %s in file s3://%s/%s is empty; sheet must include header row", sheet, input.Bucket, input.Key)
+				return ErrSheetIsEmpty
+			}
+			// validate sheet columns
+			err = validateSheetCols(f, input, group, sheet)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func validateRow(f *excelize.File, sheet string, rowNum, usernameXCoord, passwordXCoord int) error {
