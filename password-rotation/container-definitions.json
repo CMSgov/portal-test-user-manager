@@ -1,0 +1,35 @@
+[
+  {
+    "name": "${app_name}-${environment}-${task_name}",
+    "image": "${repo_url}:${image_tag}",
+    "environment": [
+      { "name": "BUCKET", "value": "${s3_bucket}" },
+      { "name": "KEY", "value": "${s3_key}" },
+      { "name": "USERNAMEHEADER", "value": "${username_header}" },
+      { "name": "PASSWORDHEADER", "value": "${password_header}" },
+      { "name": "MACFINSHEETNAMEDEV", "value": "${sheet_name_dev}" },
+      { "name": "MACFINSHEETNAMEVAL", "value": "${sheet_name_val}" },
+      { "name": "MACFINSHEETNAMEPROD", "value": "${sheet_name_prod}" },
+      { "name": "PORTALHOSTNAMEDEV", "value": "${portal_hostname_dev}" },
+      { "name": "PORTALHOSTNAMEVAL", "value": "${portal_hostname_val}" },
+      { "name": "PORTALHOSTNAMEPROD", "value": "${portal_hostname_prod}" },
+      { "name": "IDMHOSTNAMEDEV", "value": "${idm_hostname_dev}" },
+      { "name": "IDMHOSTNAMEVAL", "value": "${idm_hostname_val}" },
+      { "name": "IDMHOSTNAMEPROD", "value": "${idm_hostname_prod}" }
+    ],
+    "secrets": [
+      {
+        "valueFrom": "${automated_sheet_password_param_name}",
+        "name": "AUTOMATEDSHEETPASSWORD"
+      }
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "${awslogs_group}",
+        "awslogs-region": "${awslogs_region}",
+        "awslogs-stream-prefix": "ecs"
+      }
+    }
+  }
+]
