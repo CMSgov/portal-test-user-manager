@@ -19,7 +19,7 @@
     ],
     "secrets": [
       {
-        "valueFrom": "${automated_sheet_password}",
+        "valueFrom": "${automated_sheet_password_param_name}",
         "name": "AUTOMATEDSHEETPASSWORD"
       }
     ],

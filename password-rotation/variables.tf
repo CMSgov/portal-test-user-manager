@@ -87,29 +87,35 @@ variable "sheet_name_prod" {
 variable "portal_hostname_dev" {
   type        = string
   description = "Hostname for the dev CMS Enterprise Portal"
+  default     = "portaldev.cms.gov"
 }
 
 variable "portal_hostname_val" {
   type        = string
   description = "Hostname for the val CMS Enterprise Portal"
+  default     = "portalval.cms.gov"
 }
 
 variable "portal_hostname_prod" {
   type        = string
   description = "Hostname for the prod CMS Enterprise Portal"
+  default     = "portalval.cms.gov"
 }
 
 variable "idm_hostname_dev" {
   type        = string
   description = "Hostname for dev CMS Enterprise Portal IDM"
+  default     = "test.idp.idm.cms.gov"
 }
 
 variable "idm_hostname_val" {
   type        = string
   description = "Hostname for val CMS Enterprise Portal IDM"
+  default     = "impl.idp.idm.cms.gov"
 }
 
 variable "idm_hostname_prod" {
   type        = string
   description = "Hostname for prod CMS Enterprise Portal IDM"
+  default     = "idp.idm.cms.gov"
 }

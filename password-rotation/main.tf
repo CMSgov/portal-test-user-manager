@@ -8,12 +8,6 @@ data "aws_caller_identity" "current" {}
 
 data "aws_region" "current" {}
 
-# Create a data source to pull the latest active revision from
-data "aws_ecs_task_definition" "scheduled_task_def" {
-  task_definition = aws_ecs_task_definition.scheduled_task_def.family
-  depends_on      = [aws_ecs_task_definition.scheduled_task_def] # ensures at least one task def exists
-}
-
 ## IAM ## 
 
 # CloudWatch Event role
@@ -117,10 +111,8 @@ resource "aws_cloudwatch_event_target" "ecs_scheduled_task" {
   role_arn  = aws_iam_role.cloudwatch_target_role.arn
 
   ecs_target {
-    launch_type = "FARGATE"
-    task_count  = 1
-
-    # Use latest active revision
+    launch_type         = "FARGATE"
+    task_count          = 1
     task_definition_arn = aws_ecs_task_definition.scheduled_task_def.arn
 
     network_configuration {
@@ -183,11 +175,11 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
       repo_url    = var.repo_url
       image_tag   = var.image_tag
 
-      s3_bucket                = var.s3_bucket,
-      s3_key                   = var.s3_key,
-      username_header          = var.username_header
-      password_header          = var.password_header
-      automated_sheet_password = aws_ssm_parameter.automated_sheet_password.name
+      s3_bucket                           = var.s3_bucket,
+      s3_key                              = var.s3_key,
+      username_header                     = var.username_header
+      password_header                     = var.password_header
+      automated_sheet_password_param_name = aws_ssm_parameter.automated_sheet_password.name
 
       sheet_name_dev  = var.sheet_name_dev
       sheet_name_val  = var.sheet_name_val
