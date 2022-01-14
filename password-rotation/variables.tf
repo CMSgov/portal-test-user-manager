@@ -99,7 +99,7 @@ variable "portal_hostname_val" {
 variable "portal_hostname_prod" {
   type        = string
   description = "Hostname for the prod CMS Enterprise Portal"
-  default     = "portalval.cms.gov"
+  default     = "portal.cms.gov"
 }
 
 variable "idm_hostname_dev" {
