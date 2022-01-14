@@ -40,15 +40,16 @@ const (
 )
 
 type Input struct {
-	Bucket                       string
-	Key                          string
-	SheetName                    string
-	UsernameHeader               string
-	PasswordHeader               string
-	AutomatedSheetPassword       string
-	AutomatedSheetColNameToIndex map[Column]int
-	RowOffset                    int // number of header rows (common to all sheets)
-	SheetGroups                  map[Environment]SheetGroup
+	Bucket                         string
+	Key                            string
+	SheetName                      string
+	UsernameHeader                 string
+	PasswordHeader                 string
+	AutomatedSheetPassword         string
+	AutomatedSheetColNameToIndex   map[Column]int
+	AutomatedSheetColNameToHeading map[Column]string
+	RowOffset                      int // number of header rows (common to all sheets)
+	SheetGroups                    map[Environment]SheetGroup
 }
 
 type Portal struct {
@@ -267,6 +268,9 @@ func main() {
 		AutomatedSheetPassword: os.Getenv("AUTOMATEDSHEETPASSWORD"),
 		AutomatedSheetColNameToIndex: map[Column]int{
 			ColUser: 0, ColPassword: 1, ColPrevious: 2, ColTimestamp: 3},
+		AutomatedSheetColNameToHeading: map[Column]string{
+			ColUser: ColUserHeading, ColPassword: ColPasswordHeading,
+			ColPrevious: ColPreviousHeading, ColTimestamp: ColTimestampHeading},
 		RowOffset: 1,
 		SheetGroups: map[Environment]SheetGroup{
 			dev: {
