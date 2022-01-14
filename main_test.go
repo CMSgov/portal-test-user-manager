@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -30,19 +29,14 @@ func format(d time.Duration) string {
 const newPasswordMarker = "newPassword"
 
 const (
-	sheetNameMACFin        = "MACFin"
-	headingMACFinUsername  = "User"
-	headinggMACFinPassword = "Password"
+	sheetNameMACFin       = "MACFin"
+	headingMACFinUsername = "User"
+	headingMACFinPassword = "Password"
 
 	sheetNamePasswordManager = "PasswordManager"
+	inputBucket              = "macfin"
+	inputKey                 = "pre1/pre2/macfin-dev-lbk-s3.xlsx"
 )
-
-var headings = map[Column]string{
-	ColUser:      ColUserHeading,
-	ColPassword:  ColPasswordHeading,
-	ColPrevious:  ColPreviousHeading,
-	ColTimestamp: ColTimestampHeading,
-}
 
 func cn(col, row int) string {
 	name, err := excelize.CoordinatesToCellName(col, row, false)
@@ -273,20 +267,27 @@ type MACFinRow struct {
 	Password string
 }
 
+type SheetProblem int
+
+const (
+	NoSheetProblem SheetProblem = iota
+	SheetProblemInvalidMACFinUsernameHeading
+	SheetProblemInvalidMACFinPasswordHeading
+	SheetProblemMACFinEmpty
+	SheetProblemPasswordManagerEmpty
+	SheetProblemPasswordManagerTooManyHeadings
+	SheetProblemPasswordManagerTooFewHeadings
+	SheetProblemPasswordManagerInvalidHeadingOrder
+)
+
 type TestCase struct {
-	Name                                    string
-	PasswordManagerIn                       []PasswordManagerRow
-	PasswordManagerOut                      []PasswordManagerRow
-	MACFinIn                                []MACFinRow
-	UntrackedPasswords                      map[string]string // user -> password
-	ServerErrors                            map[string]string // user -> path
-	InvalidMACFinInUsernameHeading          bool
-	InvalidMACFinInPasswordHeading          bool
-	MACFinInEmpty                           bool
-	PasswordManagerInEmpty                  bool
-	InvalidPasswordManagerInTooManyHeadings bool
-	InvalidPasswordManagerInTooFewHeadings  bool
-	InvalidPasswordManagerInWrongHeadings   bool
+	Name               string
+	PasswordManagerIn  []PasswordManagerRow
+	PasswordManagerOut []PasswordManagerRow
+	MACFinIn           []MACFinRow
+	UntrackedPasswords map[string]string // user -> password
+	ServerErrors       map[string]string // user -> path
+	SheetInProblem     SheetProblem
 }
 
 var testCases = []TestCase{
@@ -592,7 +593,7 @@ var testCases = []TestCase{
 		MACFinIn: []MACFinRow{
 			{"chris", "foo"},
 		},
-		InvalidMACFinInUsernameHeading: true,
+		SheetInProblem: SheetProblemInvalidMACFinUsernameHeading,
 	},
 	{
 		Name: "wrong MACFinIn Password Heading",
@@ -609,42 +610,42 @@ var testCases = []TestCase{
 		MACFinIn: []MACFinRow{
 			{"chris", "foo"},
 		},
-		InvalidMACFinInPasswordHeading: true,
+		SheetInProblem: SheetProblemInvalidMACFinPasswordHeading,
 	},
 	{
 		Name:               "empty MACFinIn; no headers",
 		PasswordManagerIn:  []PasswordManagerRow{},
 		PasswordManagerOut: []PasswordManagerRow{},
 		MACFinIn:           []MACFinRow{},
-		MACFinInEmpty:      true,
+		SheetInProblem:     SheetProblemMACFinEmpty,
 	},
 	{
-		Name:                   "empty PasswordManagerIn; no headers",
-		PasswordManagerIn:      []PasswordManagerRow{},
-		PasswordManagerOut:     []PasswordManagerRow{},
-		MACFinIn:               []MACFinRow{},
-		PasswordManagerInEmpty: true,
+		Name:               "empty PasswordManagerIn; no headers",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+		SheetInProblem:     SheetProblemPasswordManagerEmpty,
 	},
 	{
-		Name:                                    "PasswordManagerIn: too many cols",
-		PasswordManagerIn:                       []PasswordManagerRow{},
-		PasswordManagerOut:                      []PasswordManagerRow{},
-		MACFinIn:                                []MACFinRow{},
-		InvalidPasswordManagerInTooManyHeadings: true,
+		Name:               "PasswordManagerIn: too many cols",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+		SheetInProblem:     SheetProblemPasswordManagerTooManyHeadings,
 	},
 	{
-		Name:                                   "PasswordManagerIn: too few cols",
-		PasswordManagerIn:                      []PasswordManagerRow{},
-		PasswordManagerOut:                     []PasswordManagerRow{},
-		MACFinIn:                               []MACFinRow{},
-		InvalidPasswordManagerInTooFewHeadings: true,
+		Name:               "PasswordManagerIn: too few cols",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+		SheetInProblem:     SheetProblemPasswordManagerTooFewHeadings,
 	},
 	{
-		Name:                                  "PasswordManagerIn: wrong headings",
-		PasswordManagerIn:                     []PasswordManagerRow{},
-		PasswordManagerOut:                    []PasswordManagerRow{},
-		MACFinIn:                              []MACFinRow{},
-		InvalidPasswordManagerInWrongHeadings: true,
+		Name:               "PasswordManagerIn: wrong heading order",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+		SheetInProblem:     SheetProblemPasswordManagerInvalidHeadingOrder,
 	},
 }
 
@@ -735,6 +736,13 @@ var columnArrangements = []ColumnArrangement{
 	},
 }
 
+var headings = map[Column]string{
+	ColUser:      ColUserHeading,
+	ColPassword:  ColPasswordHeading,
+	ColPrevious:  ColPreviousHeading,
+	ColTimestamp: ColTimestampHeading,
+}
+
 func TestRotate(t *testing.T) {
 	for _, tc := range testCases {
 		for _, arr := range columnArrangements {
@@ -753,27 +761,27 @@ func TestRotate(t *testing.T) {
 				f.SetSheetName("Sheet1", sheetNameMACFin)
 				f.NewSheet(sheetNamePasswordManager)
 
-				var usernameHeading, passwordHeading string
+				var expectedSheetError error
+				usernameHeading := headingMACFinUsername
+				passwordHeading := headingMACFinPassword
 
-				if tc.InvalidMACFinInUsernameHeading {
+				if tc.SheetInProblem == SheetProblemInvalidMACFinUsernameHeading {
 					usernameHeading = "BadUsernameHeading"
-				} else {
-					usernameHeading = headingMACFinUsername
-				}
-				if tc.InvalidMACFinInPasswordHeading {
+					expectedSheetError = fmt.Errorf("sheet %s in file s3://%s/%s does not contain header %s in top row", sheetNameMACFin, inputBucket, inputKey, headingMACFinUsername)
+				} else if tc.SheetInProblem == SheetProblemInvalidMACFinPasswordHeading {
 					passwordHeading = "BadPasswordHeading"
-				} else {
-					passwordHeading = headinggMACFinPassword
+					expectedSheetError = fmt.Errorf("sheet %s in file s3://%s/%s does not contain header %s in top row", sheetNameMACFin, inputBucket, inputKey, headingMACFinPassword)
 				}
-				if tc.MACFinInEmpty {
-					err = f.SetSheetRow(sheetNameMACFin, "A1", &[]interface{}{})
+
+				if tc.SheetInProblem == SheetProblemMACFinEmpty {
+					expectedSheetError = fmt.Errorf("sheet %s in file s3://%s/%s is empty; sheet must include header row", sheetNameMACFin, inputBucket, inputKey)
 				} else {
 					err = f.SetSheetRow(sheetNameMACFin, "A1", &[]string{
 						"Module", "User_T", "Region", "State", usernameHeading, passwordHeading,
 					})
-				}
-				if err != nil {
-					panic(err)
+					if err != nil {
+						panic(err)
+					}
 				}
 
 				for idx, row := range tc.MACFinIn {
@@ -790,20 +798,27 @@ func TestRotate(t *testing.T) {
 				h[cols[ColPassword]] = headings[ColPassword]
 				h[cols[ColPrevious]] = headings[ColPrevious]
 				h[cols[ColTimestamp]] = headings[ColTimestamp]
-				if tc.InvalidPasswordManagerInTooManyHeadings {
+
+				if tc.SheetInProblem == SheetProblemPasswordManagerTooManyHeadings {
 					h[4] = "Extra Heading"
-				}
-				if tc.InvalidPasswordManagerInWrongHeadings {
+					expectedSheetError = fmt.Errorf("Expected sheet %s to have %d cols; it has %d cols", sheetNamePasswordManager, len(cols), len(h))
+				} else if tc.SheetInProblem == SheetProblemPasswordManagerInvalidHeadingOrder {
 					h[cols[ColUser]] = headings[ColPassword]
-					h[cols[ColPassword]] = headings[ColUser]
-				}
-				if tc.InvalidPasswordManagerInTooFewHeadings {
+					expectedSheetError = fmt.Errorf("Expected %s in col %d; got %s", headings[ColUser], cols[ColUser], h[cols[ColUser]])
+				} else if tc.SheetInProblem == SheetProblemPasswordManagerTooFewHeadings {
 					h = h[:2]
+					expectedSheetError = fmt.Errorf("Expected sheet %s to have %d cols; it has %d cols", sheetNamePasswordManager, len(cols), len(h))
 				}
-				err = f.SetSheetRow(sheetNamePasswordManager, "A1", &h)
-				if err != nil {
-					panic(err)
+
+				if tc.SheetInProblem == SheetProblemPasswordManagerEmpty {
+					expectedSheetError = fmt.Errorf("sheet %s in file s3://%s/%s is empty; sheet must include header row", sheetNamePasswordManager, inputBucket, inputKey)
+				} else {
+					err = f.SetSheetRow(sheetNamePasswordManager, "A1", &h)
+					if err != nil {
+						panic(err)
+					}
 				}
+
 				for idx, row := range tc.PasswordManagerIn {
 					data := make([]string, 4)
 					data[cols[ColUser]] = row.Username
@@ -837,14 +852,16 @@ func TestRotate(t *testing.T) {
 				go func() {
 					log.Printf("Server stopped: %s", server.ListenAndServe())
 				}()
+
 				input := &Input{
-					UsernameHeader:               headingMACFinUsername,
-					PasswordHeader:               headinggMACFinPassword,
-					Bucket:                       "macfin",
-					Key:                          "pre1/pre2/macfin-dev-lbk-s3.xlsx",
-					AutomatedSheetPassword:       "asfas",
-					AutomatedSheetColNameToIndex: cols,
-					RowOffset:                    1,
+					UsernameHeader:                 headingMACFinUsername,
+					PasswordHeader:                 headingMACFinPassword,
+					Bucket:                         inputBucket,
+					Key:                            inputKey,
+					AutomatedSheetPassword:         "asfas",
+					AutomatedSheetColNameToIndex:   cols,
+					AutomatedSheetColNameToHeading: headings,
+					RowOffset:                      1,
 					SheetGroups: map[Environment]SheetGroup{
 						dev: {
 							AutomatedSheetName: "PasswordManager",
@@ -873,12 +890,21 @@ func TestRotate(t *testing.T) {
 				server.Shutdown(context.Background())
 
 				if err != nil {
-					if errors.Is(err, ErrSheetDoesNotExist) || errors.Is(err, ErrSheetIsEmpty) || errors.Is(err, ErrSheetMissingHeader) ||
-						errors.Is(err, ErrWrongNumberOfCols) || errors.Is(err, ErrWrongColumnHeading) {
-						t.Logf("Error in input file: %s", err)
-						return
+					if tc.SheetInProblem != NoSheetProblem {
+						// check for input error
+						if err.Error() == expectedSheetError.Error() {
+							t.Logf("Error in input file: %s", err)
+							return
+						} else {
+							t.Fatalf("Expected input sheet error %s, got %s", expectedSheetError, err)
+						}
 					} else {
 						t.Fatalf("Error running rotate(): %s", err)
+					}
+				} else {
+					if tc.SheetInProblem != NoSheetProblem {
+						// expected input error
+						t.Fatalf("Expected input sheet error %s, got %s", expectedSheetError, err)
 					}
 				}
 
@@ -956,9 +982,7 @@ func TestRotate(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Error getting MACFin rows: %s", err)
 				}
-				if tc.MACFinInEmpty && len(macFinRows) != 0 {
-					t.Fatalf("Expected 0 MACFin rows since MACFinIn is empty. got %d", len(macFinRows))
-				}
+
 				for idx, row := range macFinRows[1:] {
 					if len(row) < 6 {
 						continue // short, invalid row
