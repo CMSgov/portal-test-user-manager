@@ -47,21 +47,25 @@ func cn(col, row int) string {
 }
 
 func verifyNewPasswordIsUploaded(fc *FakeS3Client, contents []byte) error {
-	uploadedFp, err := excelize.OpenFile(fc.LocalPath)
+	existingFp, err := excelize.OpenFile(fc.LocalPath)
 	if err != nil {
 		return err
 	}
 
-	currFp, err := excelize.OpenReader(bytes.NewReader(contents))
+	newFp, err := excelize.OpenReader(bytes.NewReader(contents))
 	if err != nil {
 		return err
 	}
 
-	uploadedRows, err := uploadedFp.GetRows(fc.AutomatedSheetName)
+	oldAutomatedRows, err := existingFp.GetRows(fc.AutomatedSheetName)
 	if err != nil {
 		return err
 	}
-	currentRows, err := currFp.GetRows(fc.AutomatedSheetName)
+	newMACFinRows, err := newFp.GetRows(fc.SheetName)
+	if err != nil {
+		return err
+	}
+	newAutomatedRows, err := newFp.GetRows(fc.AutomatedSheetName)
 	if err != nil {
 		return err
 	}
@@ -69,28 +73,44 @@ func verifyNewPasswordIsUploaded(fc *FakeS3Client, contents []byte) error {
 	colUser := fc.AutomatedSheetColNameToIndex[ColUser]
 	colPassword := fc.AutomatedSheetColNameToIndex[ColPassword]
 	colPrevious := fc.AutomatedSheetColNameToIndex[ColPrevious]
-	upUserToPassword := make(map[string]string, 0)
-	for _, upr := range uploadedRows[fc.RowOffset:] {
-		upUserToPassword[upr[colUser]] = upr[colPassword]
+	oldUserToPassword := make(map[string]string, 0)
+	for _, upr := range oldAutomatedRows[fc.RowOffset:] {
+		oldUserToPassword[strings.ToLower(upr[colUser])] = upr[colPassword]
 	}
 
 	numNewPasswords := 0
 
-	for _, cr := range currentRows[fc.RowOffset:] {
-		user := cr[colUser]
-		if pw, ok := upUserToPassword[user]; !ok {
+	headerToXCoord := getHeaderToXCoord(newMACFinRows[0])
+	for _, cr := range newAutomatedRows[fc.RowOffset:] {
+		user := strings.ToLower(cr[colUser])
+		password := cr[colPassword]
+		passwordChanged := false
+		if pw, ok := oldUserToPassword[user]; !ok {
 			// new user with new password
-			if cr[colPassword] != cr[colPrevious] {
-				numNewPasswords++
+			if password != cr[colPrevious] {
+				passwordChanged = true
 			}
-
 		} else if pw != cr[colPassword] {
 			// new password for existing user
+			passwordChanged = true
+		}
+		if passwordChanged {
 			numNewPasswords++
+			// MACFin sheet should be updated with new password
+			for _, row := range newMACFinRows[fc.RowOffset:] {
+				if len(row) < headerToXCoord[fc.UsernameHeader] || len(row) < headerToXCoord[fc.PasswordHeader] {
+					continue // short, invalid row
+				}
+				if strings.ToLower(row[headerToXCoord[fc.UsernameHeader]]) == user {
+					if password != row[headerToXCoord[fc.PasswordHeader]] {
+						return fmt.Errorf("MACFin sheet not updated in %s after a password rotation", fc.LocalPath)
+					}
+				}
+			}
 		}
 	}
 	if numNewPasswords > 1 {
-		fc.SkippedUpload = true
+		return fmt.Errorf("Skipped file upload to %s after a password rotation", fc.LocalPath)
 	}
 
 	return nil
@@ -650,12 +670,13 @@ var testCases = []TestCase{
 }
 
 type FakeS3Client struct {
-	Bucket, Key                  string
-	LocalPath                    string
-	AutomatedSheetName           string
-	AutomatedSheetColNameToIndex map[Column]int
-	RowOffset                    int
-	SkippedUpload                bool
+	Bucket, Key                    string
+	LocalPath                      string
+	AutomatedSheetName             string
+	AutomatedSheetColNameToIndex   map[Column]int
+	SheetName                      string
+	UsernameHeader, PasswordHeader string
+	RowOffset                      int
 }
 
 func (fc *FakeS3Client) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
@@ -885,6 +906,9 @@ func TestRotate(t *testing.T) {
 					AutomatedSheetName:           input.SheetGroups[dev].AutomatedSheetName,
 					AutomatedSheetColNameToIndex: input.AutomatedSheetColNameToIndex,
 					RowOffset:                    input.RowOffset,
+					SheetName:                    input.SheetGroups[dev].SheetName,
+					UsernameHeader:               input.UsernameHeader,
+					PasswordHeader:               input.PasswordHeader,
 				}
 				err = rotate(input, envToPortal, fc)
 				server.Shutdown(context.Background())
@@ -906,10 +930,6 @@ func TestRotate(t *testing.T) {
 						// expected input error
 						t.Fatalf("Expected input sheet error %s, got %s", expectedSheetError, err)
 					}
-				}
-
-				if fc.SkippedUpload {
-					t.Errorf("Skipped file upload to %s after a password rotation", fc.LocalPath)
 				}
 
 				f, err = excelize.OpenFile(filename)
