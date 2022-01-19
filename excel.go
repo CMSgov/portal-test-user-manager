@@ -235,7 +235,7 @@ func getManagedUsers(f *excelize.File, input *Input, env Environment) (map[strin
 	for i, row := range rows[rowOffset:] {
 		userToPasswordRow[row[colUser]] = PasswordRow{
 			Password: row[colPassword],
-			Row:      i,
+			Row:      i + rowOffset,
 		}
 	}
 
