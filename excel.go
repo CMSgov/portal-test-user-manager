@@ -176,7 +176,7 @@ func getManagedUsers(f *excelize.File, input *Input, env Environment) (map[strin
 
 // Sync PasswordManager usernames with MACFin users
 func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI, env Environment) error {
-	macFinUsersToPasswords, err := getMACFinUsers(f, input, env)
+	macFinUsersToPasswordRow, err := getMACFinUsers(f, input, env)
 	if err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, clien
 	automatedSheet := input.SheetGroups[env].AutomatedSheetName
 
 	// add new MACFin users to automatedSheet
-	for mfUser, up := range macFinUsersToPasswords {
+	for mfUser, up := range macFinUsersToPasswordRow {
 		if _, ok := userToPasswordRow[mfUser]; !ok {
 			values := map[Column]string{
 				ColUser:      mfUser,
@@ -215,7 +215,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, clien
 	// get rows for deletion from automatedSheet
 	rowsToDelete := []int{}
 	for pwUser, pwRow := range userToPasswordRow {
-		if _, ok := macFinUsersToPasswords[pwUser]; !ok {
+		if _, ok := macFinUsersToPasswordRow[pwUser]; !ok {
 			// pwUser is not in MACFin users; mark row for deletion from automatedSheet
 			rowsToDelete = append(rowsToDelete, pwRow.Row)
 			continue
