@@ -466,8 +466,8 @@ var testCases = []TestCase{
 			},
 		},
 		MACFinIn: []MACFinRow{
-			{"james", "baz"},
-			{"james", "baz"}, // duplicate
+			{"james", "baz2"},
+			{"james", "baz"}, // duplicate with different passwords
 			{"chris", "foo"},
 			{"leslie", "bar"},
 			{"CHRIS", "foo"}, // duplicate with different capitalization
@@ -493,7 +493,8 @@ var testCases = []TestCase{
 		},
 		MACFinIn: []MACFinRow{
 			{"james", "baz"},
-			{"chris", "foo"},
+			{"chris", "foo2"},
+			{"chris", "foo"},  // duplicate with different password
 			{"Leslie", "bar"}, // contains uppercase
 		},
 		UntrackedPasswords: map[string]string{
@@ -525,7 +526,8 @@ var testCases = []TestCase{
 		},
 		MACFinIn: []MACFinRow{
 			{"chris", "foo"},
-			{"CHUCK", "chuckie"},
+			{"CHUCK", "chuckie2"},
+			{"chuck", "chuckie"}, // duplicate with different password
 		},
 		UntrackedPasswords: map[string]string{
 			"CHUCK": "chuckie",
@@ -995,7 +997,9 @@ func TestRotate(t *testing.T) {
 				macFinUsers := map[string]struct{}{}
 				for _, row := range tc.MACFinIn {
 					if row.Username != "" {
-						macFinUsers[row.Username] = struct{}{}
+						if _, ok := macFinUsers[strings.ToLower(row.Username)]; !ok {
+							macFinUsers[strings.ToLower(row.Username)] = struct{}{}
+						}
 					}
 				}
 				macFinRows, err := f.GetRows(sheetNameMACFin)

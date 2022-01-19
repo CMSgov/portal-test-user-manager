@@ -208,6 +208,11 @@ func rotate(input *Input, envToPortal map[Environment]*Portal, client S3ClientAP
 		return err
 	}
 
+	err = removeDupsFromMACFinSheets(f, input)
+	if err != nil {
+		return err
+	}
+
 	for env, portal := range envToPortal {
 		// true means "block action"
 		err = f.ProtectSheet(input.SheetGroups[env].AutomatedSheetName, &excelize.FormatSheetProtection{

@@ -126,6 +126,74 @@ func getHeaderToXCoord(headerRow []string) map[string]int {
 	return headerToXCoord
 }
 
+func deleteRows(f *excelize.File, sheet string, rowsToDelete []int) error {
+	sort.Ints(rowsToDelete)
+	for idx := len(rowsToDelete) - 1; idx >= 0; idx-- {
+		rowToDelete := toSheetCoord(rowsToDelete[idx])
+		err := f.RemoveRow(sheet, rowToDelete)
+		if err != nil {
+			return fmt.Errorf("failed removing row %d from %s sheet in file %s: %s", rowToDelete, sheet, f.Path, err)
+		}
+	}
+
+	err := f.Save()
+	if err != nil {
+		return fmt.Errorf("failed saving file %s after synchronizing automated sheet users to MACFin users: %s", f.Path, err)
+	}
+
+	return nil
+}
+
+// Remove duplicate MACFin usernames and write usernames to lowercase
+func removeMACFinUserDups(f *excelize.File, input *Input, env Environment) error {
+	sheetName := input.SheetGroups[env].SheetName
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		return fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", sheetName, input.Bucket, input.Key, err)
+	}
+
+	headerToXCoord := getHeaderToXCoord(rows[0])
+	usernameXCoord := headerToXCoord[input.UsernameHeader]
+	passwordXCoord := headerToXCoord[input.PasswordHeader]
+	rowOffset := input.RowOffset
+
+	users := make(map[string]bool, len(rows)-rowOffset)
+	rowsToDelete := []int{}
+	for idx := len(rows) - 1; idx >= rowOffset; idx-- {
+		err := validateRow(f, sheetName, idx, usernameXCoord, passwordXCoord)
+		if err != nil {
+			log.Printf("validating sheet %s, row %d: %s", sheetName, toSheetCoord(idx), err)
+			continue
+		}
+		if _, ok := users[strings.ToLower(rows[idx][usernameXCoord])]; ok {
+			rowsToDelete = append(rowsToDelete, idx)
+		} else {
+			users[strings.ToLower(rows[idx][usernameXCoord])] = true
+			writeCell(f, sheetName, usernameXCoord, idx, strings.ToLower(rows[idx][usernameXCoord]))
+		}
+	}
+
+	if len(rowsToDelete) > 0 {
+		err = deleteRows(f, sheetName, rowsToDelete)
+		if err != nil {
+			return fmt.Errorf("Error deleting duplicate users from sheet %s in file s3://%s/%s:%s", sheetName, input.Bucket, input.Key, err)
+		}
+		log.Printf("successfully deleted all duplicate users (%d) from %s in file s3://%s/%s", len(rowsToDelete), sheetName, input.Bucket, input.Key)
+	}
+
+	return nil
+}
+
+func removeDupsFromMACFinSheets(f *excelize.File, input *Input) error {
+	for env := range input.SheetGroups {
+		err := removeMACFinUserDups(f, input, env)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func getMACFinUsers(f *excelize.File, input *Input, env Environment) (map[string]PasswordRow, error) {
 	sheetName := input.SheetGroups[env].SheetName
 	rows, err := f.GetRows(sheetName)
