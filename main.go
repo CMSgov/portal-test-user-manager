@@ -42,7 +42,6 @@ const (
 type Input struct {
 	Bucket                         string
 	Key                            string
-	SheetName                      string
 	UsernameHeader                 string
 	PasswordHeader                 string
 	AutomatedSheetPassword         string
