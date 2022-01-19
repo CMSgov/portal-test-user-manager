@@ -291,13 +291,10 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, clien
 	}
 
 	// delete rows from automatedSheet that are marked for deletion
-	// iterate in descending order
-	sort.Ints(rowsToDelete)
-	for idx := len(rowsToDelete) - 1; idx >= 0; idx-- {
-		rowToDelete := toSheetCoord(rowsToDelete[idx] + rowOffset)
-		err := f.RemoveRow(automatedSheet, rowToDelete)
+	if len(rowsToDelete) > 0 {
+		err = deleteRows(f, automatedSheet, rowsToDelete)
 		if err != nil {
-			return fmt.Errorf("failed removing row %d from %s sheet in file %s: %s", rowToDelete, automatedSheet, f.Path, err)
+			return err
 		}
 	}
 
