@@ -83,10 +83,16 @@ func validateSheets(f *excelize.File, input *Input) error {
 				return err
 			}
 
-			// check if sheet is empty
-			if len(rows) == 0 {
+			// check if sheet has no header row on row 0
+			if len(rows) == 0 || len(rows[0]) == 0 {
 				return fmt.Errorf("sheet %s in file s3://%s/%s is empty; sheet must include header row", sheet, input.Bucket, input.Key)
 			}
+
+			// check if last header row is non-empty
+			if len(rows) < input.RowOffset {
+				return fmt.Errorf("sheet %s in file s3://%s/%s has too few header rows; expect %d rows; got %d", sheet, input.Bucket, input.Key, input.RowOffset, len(rows))
+			}
+
 			// validate sheet columns
 			err = validateSheetCols(f, input, group, sheet)
 			if err != nil {
@@ -225,6 +231,11 @@ func getManagedUsers(f *excelize.File, input *Input, env Environment) (map[strin
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", automatedSheet, input.Bucket, input.Key, err)
+	}
+
+	if len(rows) < input.RowOffset {
+		// no data rows in automated sheet
+		return nil, nil
 	}
 
 	rowOffset := input.RowOffset
@@ -388,7 +399,7 @@ func sortRows(f *excelize.File, sheetname string, rowOffset, colUserIndex int) e
 
 	// write sorted rows to automatedSheet
 	for idx, r := range rows[rowOffset:] {
-		cellName := fmt.Sprintf("A%d", 2+idx)
+		cellName := fmt.Sprintf("A%d", toSheetCoord(rowOffset+idx))
 		err = f.SetSheetRow(sheetname, cellName, &r)
 		if err != nil {
 			return fmt.Errorf("Error writing sorted sheet: %s", err)

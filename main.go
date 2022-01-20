@@ -191,7 +191,7 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3C
 	}
 
 	log.Printf("total rotations in %s: %d success: %d  fail: %d  not rotated: %d total users: %d",
-		automatedSheet, numSuccess+numFail, numSuccess, numFail, numNoRotation, len(rows)-1)
+		automatedSheet, numSuccess+numFail, numSuccess, numFail, numNoRotation, len(rows)-rowOffset)
 
 	return nil
 }

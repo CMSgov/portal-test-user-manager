@@ -36,6 +36,7 @@ const (
 	sheetNamePasswordManager = "PasswordManager"
 	inputBucket              = "macfin"
 	inputKey                 = "pre1/pre2/macfin-dev-lbk-s3.xlsx"
+	rowOffset                = 1
 )
 
 func cn(col, row int) string {
@@ -298,6 +299,8 @@ const (
 	SheetProblemPasswordManagerTooManyHeadings
 	SheetProblemPasswordManagerTooFewHeadings
 	SheetProblemPasswordManagerInvalidHeadingOrder
+	SheetProblemMACFinTooFewHeaderRows
+	SheetProblemPasswordManagerTooFewHeaderRows
 )
 
 type TestCase struct {
@@ -635,18 +638,32 @@ var testCases = []TestCase{
 		SheetInProblem: SheetProblemInvalidMACFinPasswordHeading,
 	},
 	{
-		Name:               "empty MACFinIn; no headers",
+		Name:               "empty MACFinIn; no row[0] header",
 		PasswordManagerIn:  []PasswordManagerRow{},
 		PasswordManagerOut: []PasswordManagerRow{},
 		MACFinIn:           []MACFinRow{},
 		SheetInProblem:     SheetProblemMACFinEmpty,
 	},
 	{
-		Name:               "empty PasswordManagerIn; no headers",
+		Name:               "MACFinIn: too few header rows",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+		SheetInProblem:     SheetProblemPasswordManagerTooFewHeaderRows,
+	},
+	{
+		Name:               "empty PasswordManagerIn; no row[0] header",
 		PasswordManagerIn:  []PasswordManagerRow{},
 		PasswordManagerOut: []PasswordManagerRow{},
 		MACFinIn:           []MACFinRow{},
 		SheetInProblem:     SheetProblemPasswordManagerEmpty,
+	},
+	{
+		Name:               "PasswordManagerIn: too few header rows",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+		SheetInProblem:     SheetProblemPasswordManagerTooFewHeaderRows,
 	},
 	{
 		Name:               "PasswordManagerIn: too many cols",
@@ -768,6 +785,12 @@ var headings = map[Column]string{
 
 func TestRotate(t *testing.T) {
 	for _, tc := range testCases {
+		if rowOffset == 1 && tc.SheetInProblem == SheetProblemMACFinTooFewHeaderRows {
+			t.Skipf("%s applies only when rowOffset > 1", tc.Name)
+		}
+		if rowOffset == 1 && tc.SheetInProblem == SheetProblemPasswordManagerTooFewHeaderRows {
+			t.Skipf("%s applies only when rowOffset > 1", tc.Name)
+		}
 		for _, arr := range columnArrangements {
 			name := fmt.Sprintf("%s - Columns %s", tc.Name, arr.Name)
 			cols := arr.Columns
@@ -805,10 +828,22 @@ func TestRotate(t *testing.T) {
 					if err != nil {
 						panic(err)
 					}
+					if tc.SheetInProblem == SheetProblemMACFinTooFewHeaderRows {
+						expectedSheetError = fmt.Errorf("sheet %s in file s3://%s/%s has too few header rows; expect %d rows; got %d", sheetNameMACFin, inputBucket, inputKey, rowOffset, rowOffset-1)
+						err = f.SetSheetRow(sheetNameMACFin, fmt.Sprintf("A%d", rowOffset-1), &[]string{"nextToLastHeaderRow"})
+						if err != nil {
+							panic(err)
+						}
+					} else if rowOffset > 1 {
+						err = f.SetSheetRow(sheetNameMACFin, fmt.Sprintf("A%d", rowOffset), &[]string{"lastHeaderRow"})
+						if err != nil {
+							panic(err)
+						}
+					}
 				}
 
 				for idx, row := range tc.MACFinIn {
-					err := f.SetSheetRow(sheetNameMACFin, fmt.Sprintf("A%d", 2+idx), &[]string{
+					err := f.SetSheetRow(sheetNameMACFin, fmt.Sprintf("A%d", 1+rowOffset+idx), &[]string{
 						"a", "b", "c", "d", row.Username, row.Password,
 					})
 					if err != nil {
@@ -840,6 +875,18 @@ func TestRotate(t *testing.T) {
 					if err != nil {
 						panic(err)
 					}
+					if tc.SheetInProblem == SheetProblemPasswordManagerTooFewHeaderRows {
+						expectedSheetError = fmt.Errorf("sheet %s in file s3://%s/%s has too few header rows; expect %d rows; got %d", sheetNamePasswordManager, inputBucket, inputKey, rowOffset, rowOffset-1)
+						err = f.SetSheetRow(sheetNamePasswordManager, fmt.Sprintf("A%d", rowOffset-1), &[]string{"nextToLastHeaderRow"})
+						if err != nil {
+							panic(err)
+						}
+					} else if rowOffset > 1 {
+						err = f.SetSheetRow(sheetNamePasswordManager, fmt.Sprintf("A%d", rowOffset), &[]string{"lastHeaderRow"})
+						if err != nil {
+							panic(err)
+						}
+					}
 				}
 
 				for idx, row := range tc.PasswordManagerIn {
@@ -848,7 +895,7 @@ func TestRotate(t *testing.T) {
 					data[cols[ColPassword]] = row.Password
 					data[cols[ColPrevious]] = row.Previous
 					data[cols[ColTimestamp]] = format(row.Timestamp)
-					err := f.SetSheetRow(sheetNamePasswordManager, fmt.Sprintf("A%d", 2+idx), &data)
+					err := f.SetSheetRow(sheetNamePasswordManager, fmt.Sprintf("A%d", 1+rowOffset+idx), &data)
 					if err != nil {
 						panic(err)
 					}
@@ -884,7 +931,7 @@ func TestRotate(t *testing.T) {
 					AutomatedSheetPassword:         "asfas",
 					AutomatedSheetColNameToIndex:   cols,
 					AutomatedSheetColNameToHeading: headings,
-					RowOffset:                      1,
+					RowOffset:                      rowOffset,
 					SheetGroups: map[Environment]SheetGroup{
 						dev: {
 							AutomatedSheetName: "PasswordManager",
@@ -949,14 +996,14 @@ func TestRotate(t *testing.T) {
 				}
 				userToPassword := map[string]string{}
 				for rowIdx, expected := range tc.PasswordManagerOut {
-					gotRow := pmRows[rowIdx+1]
+					gotRow := pmRows[rowIdx+input.RowOffset]
 					gotUsername := gotRow[input.AutomatedSheetColNameToIndex[ColUser]]
 					gotPassword := gotRow[input.AutomatedSheetColNameToIndex[ColPassword]]
 					gotPrevious := gotRow[input.AutomatedSheetColNameToIndex[ColPrevious]]
 					gotTS := gotRow[input.AutomatedSheetColNameToIndex[ColTimestamp]]
 					if expected.Username != gotUsername {
 						t.Fatalf("%s Row %d: expected Username=%s but got Username=%s",
-							sheetNamePasswordManager, rowIdx+1, expected.Username, gotUsername)
+							sheetNamePasswordManager, 1+rowIdx+input.RowOffset, expected.Username, gotUsername)
 					}
 					// If the password has changed, we can't predict what it
 					// will be, so just check that it matches what was sent to
@@ -967,7 +1014,7 @@ func TestRotate(t *testing.T) {
 							t.Fatalf("%s's password was changed unexpectedly", expected.Username)
 						} else if newPassword != gotPassword {
 							t.Fatalf("%s Row %d: new password recorded as %q but sent to server as %q",
-								sheetNamePasswordManager, rowIdx+1, gotPassword, newPassword)
+								sheetNamePasswordManager, input.RowOffset+rowIdx+1, gotPassword, newPassword)
 						}
 						delete(handler.UserToNewPassword, expected.Username)
 					} else if expected.Password == newPasswordMarker {
@@ -975,18 +1022,18 @@ func TestRotate(t *testing.T) {
 					}
 					if expected.Previous != gotPrevious {
 						t.Fatalf("%s Row %d: expected Previous=%s but got Previous=%s",
-							sheetNamePasswordManager, rowIdx+1, expected.Previous, gotPrevious)
+							sheetNamePasswordManager, input.RowOffset+rowIdx+1, expected.Previous, gotPrevious)
 					}
 					expectedTimestamp := now.Add(expected.Timestamp)
 					gotTimestamp, err := time.Parse(time.UnixDate, gotTS)
 					if err != nil {
-						t.Fatalf("%s Row %d: error parsing date %q: %s", sheetNamePasswordManager, rowIdx+1, gotTimestamp, err)
+						t.Fatalf("%s Row %d: error parsing date %q: %s", sheetNamePasswordManager, input.RowOffset+rowIdx+1, gotTimestamp, err)
 					}
 					diff := expectedTimestamp.Sub(gotTimestamp)
 					maxDiff := time.Hour
 					if diff < -maxDiff || diff > maxDiff {
 						t.Fatalf("%s Row %d: expected Timestamp~=%s but got Timestamp=%s",
-							sheetNamePasswordManager, rowIdx+1, expectedTimestamp, gotTS)
+							sheetNamePasswordManager, input.RowOffset+rowIdx+1, expectedTimestamp, gotTS)
 					}
 					userToPassword[gotUsername] = gotPassword
 				}
@@ -1007,7 +1054,7 @@ func TestRotate(t *testing.T) {
 					t.Fatalf("Error getting MACFin rows: %s", err)
 				}
 
-				for idx, row := range macFinRows[1:] {
+				for idx, row := range macFinRows[input.RowOffset:] {
 					if len(row) < 6 {
 						continue // short, invalid row
 					}
@@ -1016,10 +1063,10 @@ func TestRotate(t *testing.T) {
 					expectedPassword, ok := userToPassword[strings.ToLower(username)]
 					if !ok {
 						t.Fatalf("%s row %d: user %q is not in password manager",
-							sheetNameMACFin, idx+1, username)
+							sheetNameMACFin, input.RowOffset+idx+1, username)
 					} else if expectedPassword != password {
 						t.Fatalf("%s row %d: Expected password %q but got %q",
-							sheetNameMACFin, idx+1, expectedPassword, password)
+							sheetNameMACFin, input.RowOffset+idx+1, expectedPassword, password)
 					}
 					delete(macFinUsers, username)
 				}
