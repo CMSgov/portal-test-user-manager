@@ -131,7 +131,7 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3C
 		} else {
 			lastRotated, err = time.Parse(time.UnixDate, row[colTimestamp])
 			if err != nil {
-				return fmt.Errorf("Error parsing timestamp from row %d for user %s: %s", i+rowOffset, name, err)
+				return fmt.Errorf("Error parsing timestamp from row %d for user %s: %s", toSheetCoord(i+rowOffset), name, err)
 			}
 		}
 
@@ -152,7 +152,7 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3C
 			err = copyCell(f, automatedSheet, colPassword, i+rowOffset, colPrevious, i+rowOffset)
 			if err != nil {
 				return fmt.Errorf("failed to write previous password %s to sheet %s, row %d for user %s: %s",
-					row[colPassword], automatedSheet, i+rowOffset, name, err)
+					row[colPassword], automatedSheet, toSheetCoord(i+rowOffset), name, err)
 			}
 
 			// write new password to password col
