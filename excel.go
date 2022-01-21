@@ -233,11 +233,6 @@ func getManagedUsers(f *excelize.File, input *Input, env Environment) (map[strin
 		return nil, fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", automatedSheet, input.Bucket, input.Key, err)
 	}
 
-	if len(rows) < input.RowOffset {
-		// no data rows in automated sheet
-		return nil, nil
-	}
-
 	rowOffset := input.RowOffset
 	colUser := input.AutomatedSheetColNameToIndex[ColUser]
 	colPassword := input.AutomatedSheetColNameToIndex[ColPassword]
@@ -387,10 +382,6 @@ func sortRows(f *excelize.File, sheetname string, rowOffset, colUserIndex int) e
 	rows, err := f.GetRows(sheetname)
 	if err != nil {
 		return err
-	}
-
-	if len(rows) <= rowOffset {
-		return nil
 	}
 
 	sort.Slice(rows[rowOffset:], func(i, j int) bool {
