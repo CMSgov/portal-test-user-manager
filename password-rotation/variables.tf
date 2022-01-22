@@ -117,6 +117,9 @@ variable "idm_hostname_val" {
 variable "idm_hostname_prod" {
   type        = string
   description = "Hostname for prod CMS Enterprise Portal IDM"
+  default     = "idm.cms.gov"
+}
+
 variable "sns_topic" {
   type        = string
   description = "password-rotator alarm notifications"
