@@ -117,5 +117,5 @@ variable "idm_hostname_val" {
 variable "idm_hostname_prod" {
   type        = string
   description = "Hostname for prod CMS Enterprise Portal IDM"
-  default     = "idp.idm.cms.gov"
+  default     = "idm.cms.gov"
 }

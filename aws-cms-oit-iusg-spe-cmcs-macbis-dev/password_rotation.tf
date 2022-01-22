@@ -9,11 +9,11 @@ module "password_rotation" {
   image_tag                = "latest"
   ecs_vpc_id               = "vpc-043ae3133b10db9a0"
   ecs_subnet_ids           = ["subnet-03f688f7435a936d7", "subnet-0fb2cb5b2036a5c6a"] // private subnets
-  schedule_task_expression = "cron(0/1 * * * ? *)"                                    // every 1 minute
-  event_rule_enabled       = false
+  schedule_task_expression = "cron(0 21 * * ? *)"                                     // every day at 4 PM ET
+  event_rule_enabled       = true
 
   s3_bucket       = "bharvey-test-same-account-bucket"
-  s3_key          = "example.txt"
+  s3_key          = "macfin-macfc-portal-users.xlsx"
   username_header = "UserName"
   password_header = "Password"
 
@@ -27,5 +27,5 @@ module "password_rotation" {
 
   idm_hostname_dev  = "test.idp.idm.cms.gov"
   idm_hostname_val  = "impl.idp.idm.cms.gov"
-  idm_hostname_prod = "idp.idm.cms.gov"
+  idm_hostname_prod = "idm.cms.gov"
 }
