@@ -21,11 +21,5 @@ module "password_rotation" {
   sheet_name_val  = "Portal-VAL"
   sheet_name_prod = "Portal-PROD"
 
-  portal_hostname_dev  = "portaldev.cms.gov"
-  portal_hostname_val  = "portalval.cms.gov"
-  portal_hostname_prod = "portal.cms.gov"
-
-  idm_hostname_dev  = "test.idp.idm.cms.gov"
-  idm_hostname_val  = "impl.idp.idm.cms.gov"
-  idm_hostname_prod = "idp.idm.cms.gov"
+  sns_topic = "password-rotator"
 }

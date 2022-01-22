@@ -97,6 +97,8 @@ resource "aws_iam_policy" "parameter_store" {
 
 ## CloudWatch ##
 
+# Monitor Cloudwatch Logs
+
 resource "aws_cloudwatch_event_rule" "run_command" {
   name                = "${var.task_name}-${var.environment}"
   description         = "Scheduled task for ${var.task_name} in ${var.environment}"
@@ -120,6 +122,70 @@ resource "aws_cloudwatch_event_target" "ecs_scheduled_task" {
       security_groups = [aws_security_group.ecs_sg.id]
     }
   }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "error_count" {
+  name           = "${var.app_name}-error-count"
+  pattern        = "?Error ?failed"
+  log_group_name = local.awslogs_group
+
+  metric_transformation {
+    name          = "ErrorCount"
+    namespace     = "${var.app_name}-errors"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "error_count" {
+  alarm_description   = "Detects errors logged by ${var.app_name}"
+  alarm_name          = "${var.app_name}-errors"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.error_count.metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.error_count.metric_transformation[0].namespace
+  period              = "300"
+  statistic           = "Sum"
+  threshold           = "1"
+  treat_missing_data  = "ignore"
+  datapoints_to_alarm = "1"
+  alarm_actions       = [aws_sns_topic.password_rotation.arn]
+  ok_actions          = [aws_sns_topic.password_rotation.arn]
+}
+
+resource "aws_cloudwatch_log_metric_filter" "info_count" {
+  name           = "${var.app_name}-info-count"
+  pattern        = "validating sheet"
+  log_group_name = local.awslogs_group
+
+  metric_transformation {
+    name          = "InfoCount"
+    namespace     = "${var.app_name}-info"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "info_count" {
+  alarm_description   = "Detects missing username or password logged by ${var.app_name}"
+  alarm_name          = "${var.app_name}-info"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.info_count.metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.info_count.metric_transformation[0].namespace
+  period              = "300"
+  statistic           = "Sum"
+  threshold           = "1"
+  treat_missing_data  = "ignore"
+  datapoints_to_alarm = "1"
+  alarm_actions       = [aws_sns_topic.password_rotation.arn]
+  ok_actions          = [aws_sns_topic.password_rotation.arn]
+}
+
+## SNS ##
+
+resource "aws_sns_topic" "password_rotation" {
+  name = var.app_name
 }
 
 ## ECS ##
