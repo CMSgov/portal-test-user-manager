@@ -299,6 +299,6 @@ func main() {
 
 	err = rotate(input, envToPortal, client)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error rotating passwords: %s", err)
 	}
 }
