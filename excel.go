@@ -83,16 +83,10 @@ func validateSheets(f *excelize.File, input *Input) error {
 				return err
 			}
 
-			// check if sheet has no header row on row 0
-			if len(rows) == 0 || len(rows[0]) == 0 {
+			// check if sheet is empty
+			if len(rows) == 0 {
 				return fmt.Errorf("sheet %s in file s3://%s/%s is empty; sheet must include header row", sheet, input.Bucket, input.Key)
 			}
-
-			// check if last header row is non-empty
-			if len(rows) < input.RowOffset {
-				return fmt.Errorf("sheet %s in file s3://%s/%s has too few header rows; expect %d rows; got %d", sheet, input.Bucket, input.Key, input.RowOffset, len(rows))
-			}
-
 			// validate sheet columns
 			err = validateSheetCols(f, input, group, sheet)
 			if err != nil {
@@ -390,7 +384,7 @@ func sortRows(f *excelize.File, sheetname string, rowOffset, colUserIndex int) e
 
 	// write sorted rows to automatedSheet
 	for idx, r := range rows[rowOffset:] {
-		cellName := fmt.Sprintf("A%d", toSheetCoord(rowOffset+idx))
+		cellName := fmt.Sprintf("A%d", 2+idx)
 		err = f.SetSheetRow(sheetname, cellName, &r)
 		if err != nil {
 			return fmt.Errorf("Error writing sorted sheet: %s", err)
