@@ -997,9 +997,7 @@ func TestRotate(t *testing.T) {
 				macFinUsers := map[string]struct{}{}
 				for _, row := range tc.MACFinIn {
 					if row.Username != "" {
-						if _, ok := macFinUsers[strings.ToLower(row.Username)]; !ok {
-							macFinUsers[strings.ToLower(row.Username)] = struct{}{}
-						}
+						macFinUsers[strings.ToLower(row.Username)] = struct{}{}
 					}
 				}
 				macFinRows, err := f.GetRows(sheetNameMACFin)
