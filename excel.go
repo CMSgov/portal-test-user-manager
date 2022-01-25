@@ -303,7 +303,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, clien
 		return fmt.Errorf("failed saving file %s after synchronizing automated sheet users to MACFin users: %s", f.Path, err)
 	}
 
-	err = sortRows(f, automatedSheet, rowOffset, input.AutomatedSheetColNameToIndex[ColUser])
+	err = sortRows(f, input, automatedSheet)
 	if err != nil {
 		return fmt.Errorf("failed sorting %s after synchronizing sheet to MACFin users: %s", automatedSheet, err)
 	}
@@ -372,18 +372,20 @@ func copyCell(f *excelize.File, automatedSheetName string, srcX, srcY, destX, de
 	return nil
 }
 
-func sortRows(f *excelize.File, sheetname string, rowOffset, colUserIndex int) error {
+func sortRows(f *excelize.File, input *Input, sheetname string) error {
 	rows, err := f.GetRows(sheetname)
 	if err != nil {
 		return err
 	}
 
-	sort.Slice(rows[rowOffset:], func(i, j int) bool {
-		return rows[rowOffset+i][colUserIndex] < rows[rowOffset+j][colUserIndex]
+	colUser := input.AutomatedSheetColNameToIndex[ColUser]
+
+	sort.Slice(rows[input.RowOffset:], func(i, j int) bool {
+		return rows[input.RowOffset+i][colUser] < rows[input.RowOffset+j][colUser]
 	})
 
 	// write sorted rows to automatedSheet
-	for idx, r := range rows[rowOffset:] {
+	for idx, r := range rows[input.RowOffset:] {
 		cellName := fmt.Sprintf("A%d", 2+idx)
 		err = f.SetSheetRow(sheetname, cellName, &r)
 		if err != nil {
