@@ -45,7 +45,7 @@ variable "schedule_task_expression" {
 variable "event_rule_enabled" {
   type        = bool
   description = "Whether the event rule that triggers the task is enabled"
-  default     = true
+  default     = false
 }
 
 variable "s3_bucket" {
@@ -117,5 +117,5 @@ variable "idm_hostname_val" {
 variable "idm_hostname_prod" {
   type        = string
   description = "Hostname for prod CMS Enterprise Portal IDM"
-  default     = "idp.idm.cms.gov"
+  default     = "idm.cms.gov"
 }
