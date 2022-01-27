@@ -29,19 +29,14 @@ func format(d time.Duration) string {
 const newPasswordMarker = "newPassword"
 
 const (
-	sheetNameMACFin        = "MACFin"
-	headingMACFinUsername  = "User"
-	headinggMACFinPassword = "Password"
+	sheetNameMACFin       = "MACFin"
+	headingMACFinUsername = "User"
+	headingMACFinPassword = "Password"
 
 	sheetNamePasswordManager = "PasswordManager"
+	inputBucket              = "macfin"
+	inputKey                 = "pre1/pre2/macfin-dev-lbk-s3.xlsx"
 )
-
-var headings = map[Column]string{
-	ColUser:      "User",
-	ColPassword:  "Password",
-	ColPrevious:  "Previous",
-	ColTimestamp: "Timestamp",
-}
 
 func cn(col, row int) string {
 	name, err := excelize.CoordinatesToCellName(col, row, false)
@@ -52,21 +47,25 @@ func cn(col, row int) string {
 }
 
 func verifyNewPasswordIsUploaded(fc *FakeS3Client, contents []byte) error {
-	uploadedFp, err := excelize.OpenFile(fc.LocalPath)
+	existingFp, err := excelize.OpenFile(fc.LocalPath)
 	if err != nil {
 		return err
 	}
 
-	currFp, err := excelize.OpenReader(bytes.NewReader(contents))
+	newFp, err := excelize.OpenReader(bytes.NewReader(contents))
 	if err != nil {
 		return err
 	}
 
-	uploadedRows, err := uploadedFp.GetRows(fc.AutomatedSheetName)
+	oldAutomatedRows, err := existingFp.GetRows(fc.AutomatedSheetName)
 	if err != nil {
 		return err
 	}
-	currentRows, err := currFp.GetRows(fc.AutomatedSheetName)
+	newMACFinRows, err := newFp.GetRows(fc.SheetName)
+	if err != nil {
+		return err
+	}
+	newAutomatedRows, err := newFp.GetRows(fc.AutomatedSheetName)
 	if err != nil {
 		return err
 	}
@@ -74,28 +73,44 @@ func verifyNewPasswordIsUploaded(fc *FakeS3Client, contents []byte) error {
 	colUser := fc.AutomatedSheetColNameToIndex[ColUser]
 	colPassword := fc.AutomatedSheetColNameToIndex[ColPassword]
 	colPrevious := fc.AutomatedSheetColNameToIndex[ColPrevious]
-	upUserToPassword := make(map[string]string, 0)
-	for _, upr := range uploadedRows[fc.RowOffset:] {
-		upUserToPassword[upr[colUser]] = upr[colPassword]
+	oldUserToPassword := make(map[string]string, 0)
+	for _, upr := range oldAutomatedRows[fc.RowOffset:] {
+		oldUserToPassword[strings.ToLower(upr[colUser])] = upr[colPassword]
 	}
 
 	numNewPasswords := 0
 
-	for _, cr := range currentRows[fc.RowOffset:] {
-		user := cr[colUser]
-		if pw, ok := upUserToPassword[user]; !ok {
+	headerToXCoord := getHeaderToXCoord(newMACFinRows[0])
+	for _, cr := range newAutomatedRows[fc.RowOffset:] {
+		user := strings.ToLower(cr[colUser])
+		password := cr[colPassword]
+		passwordChanged := false
+		if pw, ok := oldUserToPassword[user]; !ok {
 			// new user with new password
-			if cr[colPassword] != cr[colPrevious] {
-				numNewPasswords++
+			if password != cr[colPrevious] {
+				passwordChanged = true
 			}
-
 		} else if pw != cr[colPassword] {
 			// new password for existing user
+			passwordChanged = true
+		}
+		if passwordChanged {
 			numNewPasswords++
+			// MACFin sheet should be updated with new password
+			for _, row := range newMACFinRows[fc.RowOffset:] {
+				if len(row) < headerToXCoord[fc.UsernameHeader] || len(row) < headerToXCoord[fc.PasswordHeader] {
+					continue // short, invalid row
+				}
+				if strings.ToLower(row[headerToXCoord[fc.UsernameHeader]]) == user {
+					if password != row[headerToXCoord[fc.PasswordHeader]] {
+						return fmt.Errorf("MACFin sheet not updated in %s after a password rotation", fc.LocalPath)
+					}
+				}
+			}
 		}
 	}
 	if numNewPasswords > 1 {
-		fc.SkippedUpload = true
+		return fmt.Errorf("Skipped file upload to %s after a password rotation", fc.LocalPath)
 	}
 
 	return nil
@@ -272,6 +287,19 @@ type MACFinRow struct {
 	Password string
 }
 
+type SheetProblem int
+
+const (
+	NoSheetProblem SheetProblem = iota
+	SheetProblemInvalidMACFinUsernameHeading
+	SheetProblemInvalidMACFinPasswordHeading
+	SheetProblemMACFinEmpty
+	SheetProblemPasswordManagerEmpty
+	SheetProblemPasswordManagerTooManyHeadings
+	SheetProblemPasswordManagerTooFewHeadings
+	SheetProblemPasswordManagerInvalidHeadingOrder
+)
+
 type TestCase struct {
 	Name               string
 	PasswordManagerIn  []PasswordManagerRow
@@ -279,6 +307,7 @@ type TestCase struct {
 	MACFinIn           []MACFinRow
 	UntrackedPasswords map[string]string // user -> password
 	ServerErrors       map[string]string // user -> path
+	SheetInProblem     SheetProblem
 }
 
 var testCases = []TestCase{
@@ -437,8 +466,8 @@ var testCases = []TestCase{
 			},
 		},
 		MACFinIn: []MACFinRow{
-			{"james", "baz"},
-			{"james", "baz"}, // duplicate
+			{"james", "baz2"},
+			{"james", "baz"}, // duplicate with different passwords
 			{"chris", "foo"},
 			{"leslie", "bar"},
 			{"CHRIS", "foo"}, // duplicate with different capitalization
@@ -464,7 +493,8 @@ var testCases = []TestCase{
 		},
 		MACFinIn: []MACFinRow{
 			{"james", "baz"},
-			{"chris", "foo"},
+			{"chris", "foo2"},
+			{"chris", "foo"},  // duplicate with different password
 			{"Leslie", "bar"}, // contains uppercase
 		},
 		UntrackedPasswords: map[string]string{
@@ -496,7 +526,8 @@ var testCases = []TestCase{
 		},
 		MACFinIn: []MACFinRow{
 			{"chris", "foo"},
-			{"CHUCK", "chuckie"},
+			{"CHUCK", "chuckie2"},
+			{"chuck", "chuckie"}, // duplicate with different password
 		},
 		UntrackedPasswords: map[string]string{
 			"CHUCK": "chuckie",
@@ -569,15 +600,85 @@ var testCases = []TestCase{
 			"leslie": changePasswordPath,
 		},
 	},
+	{
+		Name: "wrong MACFinIn Username Heading",
+		PasswordManagerIn: []PasswordManagerRow{
+			{
+				"chris", "foo", "", -20 * Day,
+			},
+		},
+		PasswordManagerOut: []PasswordManagerRow{
+			{
+				"chris", "foo", "", -20 * Day,
+			},
+		},
+		MACFinIn: []MACFinRow{
+			{"chris", "foo"},
+		},
+		SheetInProblem: SheetProblemInvalidMACFinUsernameHeading,
+	},
+	{
+		Name: "wrong MACFinIn Password Heading",
+		PasswordManagerIn: []PasswordManagerRow{
+			{
+				"chris", "foo", "", -20 * Day,
+			},
+		},
+		PasswordManagerOut: []PasswordManagerRow{
+			{
+				"chris", "foo", "", -20 * Day,
+			},
+		},
+		MACFinIn: []MACFinRow{
+			{"chris", "foo"},
+		},
+		SheetInProblem: SheetProblemInvalidMACFinPasswordHeading,
+	},
+	{
+		Name:               "empty MACFinIn; no headers",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+		SheetInProblem:     SheetProblemMACFinEmpty,
+	},
+	{
+		Name:               "empty PasswordManagerIn; no headers",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+		SheetInProblem:     SheetProblemPasswordManagerEmpty,
+	},
+	{
+		Name:               "PasswordManagerIn: too many cols",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+		SheetInProblem:     SheetProblemPasswordManagerTooManyHeadings,
+	},
+	{
+		Name:               "PasswordManagerIn: too few cols",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+		SheetInProblem:     SheetProblemPasswordManagerTooFewHeadings,
+	},
+	{
+		Name:               "PasswordManagerIn: wrong heading order",
+		PasswordManagerIn:  []PasswordManagerRow{},
+		PasswordManagerOut: []PasswordManagerRow{},
+		MACFinIn:           []MACFinRow{},
+		SheetInProblem:     SheetProblemPasswordManagerInvalidHeadingOrder,
+	},
 }
 
 type FakeS3Client struct {
-	Bucket, Key                  string
-	LocalPath                    string
-	AutomatedSheetName           string
-	AutomatedSheetColNameToIndex map[Column]int
-	RowOffset                    int
-	SkippedUpload                bool
+	Bucket, Key                    string
+	LocalPath                      string
+	AutomatedSheetName             string
+	AutomatedSheetColNameToIndex   map[Column]int
+	SheetName                      string
+	UsernameHeader, PasswordHeader string
+	RowOffset                      int
 }
 
 func (fc *FakeS3Client) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
@@ -658,6 +759,13 @@ var columnArrangements = []ColumnArrangement{
 	},
 }
 
+var headings = map[Column]string{
+	ColUser:      ColUserHeading,
+	ColPassword:  ColPasswordHeading,
+	ColPrevious:  ColPreviousHeading,
+	ColTimestamp: ColTimestampHeading,
+}
+
 func TestRotate(t *testing.T) {
 	for _, tc := range testCases {
 		for _, arr := range columnArrangements {
@@ -676,12 +784,29 @@ func TestRotate(t *testing.T) {
 				f.SetSheetName("Sheet1", sheetNameMACFin)
 				f.NewSheet(sheetNamePasswordManager)
 
-				err = f.SetSheetRow(sheetNameMACFin, "A1", &[]string{
-					"Module", "User_T", "Region", "State", headingMACFinUsername, headinggMACFinPassword,
-				})
-				if err != nil {
-					panic(err)
+				var expectedSheetError error
+				usernameHeading := headingMACFinUsername
+				passwordHeading := headingMACFinPassword
+
+				if tc.SheetInProblem == SheetProblemInvalidMACFinUsernameHeading {
+					usernameHeading = "BadUsernameHeading"
+					expectedSheetError = fmt.Errorf("sheet %s in file s3://%s/%s does not contain header %s in top row", sheetNameMACFin, inputBucket, inputKey, headingMACFinUsername)
+				} else if tc.SheetInProblem == SheetProblemInvalidMACFinPasswordHeading {
+					passwordHeading = "BadPasswordHeading"
+					expectedSheetError = fmt.Errorf("sheet %s in file s3://%s/%s does not contain header %s in top row", sheetNameMACFin, inputBucket, inputKey, headingMACFinPassword)
 				}
+
+				if tc.SheetInProblem == SheetProblemMACFinEmpty {
+					expectedSheetError = fmt.Errorf("sheet %s in file s3://%s/%s is empty; sheet must include header row", sheetNameMACFin, inputBucket, inputKey)
+				} else {
+					err = f.SetSheetRow(sheetNameMACFin, "A1", &[]string{
+						"Module", "User_T", "Region", "State", usernameHeading, passwordHeading,
+					})
+					if err != nil {
+						panic(err)
+					}
+				}
+
 				for idx, row := range tc.MACFinIn {
 					err := f.SetSheetRow(sheetNameMACFin, fmt.Sprintf("A%d", 2+idx), &[]string{
 						"a", "b", "c", "d", row.Username, row.Password,
@@ -691,15 +816,32 @@ func TestRotate(t *testing.T) {
 					}
 				}
 
-				h := make([]string, 4)
+				h := make([]string, 5)
 				h[cols[ColUser]] = headings[ColUser]
 				h[cols[ColPassword]] = headings[ColPassword]
 				h[cols[ColPrevious]] = headings[ColPrevious]
 				h[cols[ColTimestamp]] = headings[ColTimestamp]
-				err = f.SetSheetRow(sheetNamePasswordManager, "A1", &h)
-				if err != nil {
-					panic(err)
+
+				if tc.SheetInProblem == SheetProblemPasswordManagerTooManyHeadings {
+					h[4] = "Extra Heading"
+					expectedSheetError = fmt.Errorf("Expected sheet %s to have %d cols; it has %d cols", sheetNamePasswordManager, len(cols), len(h))
+				} else if tc.SheetInProblem == SheetProblemPasswordManagerInvalidHeadingOrder {
+					h[cols[ColUser]] = headings[ColPassword]
+					expectedSheetError = fmt.Errorf("Expected %s in col %d; got %s", headings[ColUser], cols[ColUser], h[cols[ColUser]])
+				} else if tc.SheetInProblem == SheetProblemPasswordManagerTooFewHeadings {
+					h = h[:2]
+					expectedSheetError = fmt.Errorf("Expected sheet %s to have %d cols; it has %d cols", sheetNamePasswordManager, len(cols), len(h))
 				}
+
+				if tc.SheetInProblem == SheetProblemPasswordManagerEmpty {
+					expectedSheetError = fmt.Errorf("sheet %s in file s3://%s/%s is empty; sheet must include header row", sheetNamePasswordManager, inputBucket, inputKey)
+				} else {
+					err = f.SetSheetRow(sheetNamePasswordManager, "A1", &h)
+					if err != nil {
+						panic(err)
+					}
+				}
+
 				for idx, row := range tc.PasswordManagerIn {
 					data := make([]string, 4)
 					data[cols[ColUser]] = row.Username
@@ -733,41 +875,63 @@ func TestRotate(t *testing.T) {
 				go func() {
 					log.Printf("Server stopped: %s", server.ListenAndServe())
 				}()
+
 				input := &Input{
-					SheetName:                    sheetNameMACFin,
-					UsernameHeader:               headingMACFinUsername,
-					PasswordHeader:               headinggMACFinPassword,
-					Bucket:                       "macfin",
-					Key:                          "pre1/pre2/macfin-dev-lbk-s3.xlsx",
-					AutomatedSheetPassword:       "asfas",
-					AutomatedSheetName:           "PasswordManager",
-					AutomatedSheetColNameToIndex: cols,
-					RowOffset:                    1,
+					UsernameHeader:                 headingMACFinUsername,
+					PasswordHeader:                 headingMACFinPassword,
+					Bucket:                         inputBucket,
+					Key:                            inputKey,
+					AutomatedSheetPassword:         "asfas",
+					AutomatedSheetColNameToIndex:   cols,
+					AutomatedSheetColNameToHeading: headings,
+					RowOffset:                      1,
+					SheetGroups: map[Environment]SheetGroup{
+						dev: {
+							AutomatedSheetName: "PasswordManager",
+							SheetName:          sheetNameMACFin,
+						},
+					},
 				}
 
-				portal := &Portal{
-					Hostname:    portalServer,
-					IDMHostname: idmServer,
-					Scheme:      "http://",
+				envToPortal := map[Environment]*Portal{
+					dev: {
+						Hostname:    portalServer,
+						IDMHostname: idmServer,
+						Scheme:      "http://",
+					},
 				}
 
 				fc := &FakeS3Client{
 					Bucket:                       input.Bucket,
 					Key:                          input.Key,
 					LocalPath:                    filename,
-					AutomatedSheetName:           input.AutomatedSheetName,
+					AutomatedSheetName:           input.SheetGroups[dev].AutomatedSheetName,
 					AutomatedSheetColNameToIndex: input.AutomatedSheetColNameToIndex,
 					RowOffset:                    input.RowOffset,
+					SheetName:                    input.SheetGroups[dev].SheetName,
+					UsernameHeader:               input.UsernameHeader,
+					PasswordHeader:               input.PasswordHeader,
 				}
-				err = rotate(input, portal, fc)
+				err = rotate(input, envToPortal, fc)
 				server.Shutdown(context.Background())
 
 				if err != nil {
-					t.Fatalf("Error running rotate(): %s", err)
-				}
-
-				if fc.SkippedUpload {
-					t.Errorf("Skipped file upload to %s after a password rotation", fc.LocalPath)
+					if tc.SheetInProblem != NoSheetProblem {
+						// check for input error
+						if err.Error() == expectedSheetError.Error() {
+							t.Logf("Error in input file: %s", err)
+							return
+						} else {
+							t.Fatalf("Expected input sheet error %s, got %s", expectedSheetError, err)
+						}
+					} else {
+						t.Fatalf("Error running rotate(): %s", err)
+					}
+				} else {
+					if tc.SheetInProblem != NoSheetProblem {
+						// expected input error
+						t.Fatalf("Expected input sheet error %s, got %s", expectedSheetError, err)
+					}
 				}
 
 				f, err = excelize.OpenFile(filename)
@@ -833,13 +997,14 @@ func TestRotate(t *testing.T) {
 				macFinUsers := map[string]struct{}{}
 				for _, row := range tc.MACFinIn {
 					if row.Username != "" {
-						macFinUsers[row.Username] = struct{}{}
+						macFinUsers[strings.ToLower(row.Username)] = struct{}{}
 					}
 				}
 				macFinRows, err := f.GetRows(sheetNameMACFin)
 				if err != nil {
 					t.Fatalf("Error getting MACFin rows: %s", err)
 				}
+
 				for idx, row := range macFinRows[1:] {
 					if len(row) < 6 {
 						continue // short, invalid row

@@ -19,6 +19,84 @@ func toSheetCoord(coord int) int {
 	return coord + 1
 }
 
+func contains(items []string, item string) bool {
+	for _, it := range items {
+		if it == item {
+			return true
+		}
+	}
+
+	return false
+}
+
+func validateSheetCols(f *excelize.File, input *Input, group SheetGroup, sheetName string) error {
+	if sheetName == group.SheetName {
+		// validate MACFin sheet cols
+		rows, err := f.GetRows(sheetName)
+		if err != nil {
+			return err
+		}
+		header := rows[0]
+		// check for username header
+		if !contains(header, input.UsernameHeader) {
+			return fmt.Errorf("sheet %s in file s3://%s/%s does not contain header %s in top row", sheetName, input.Bucket, input.Key, input.UsernameHeader)
+		}
+		// check for password header
+		if !contains(header, input.PasswordHeader) {
+			return fmt.Errorf("sheet %s in file s3://%s/%s does not contain header %s in top row", sheetName, input.Bucket, input.Key, input.PasswordHeader)
+		}
+	} else if sheetName == group.AutomatedSheetName {
+		// validate automated sheet cols
+		rows, err := f.GetRows(sheetName)
+		if err != nil {
+			return err
+		}
+		header := rows[0]
+		// check number of cols
+		if len(header) != len(input.AutomatedSheetColNameToIndex) {
+			return fmt.Errorf("Expected sheet %s to have %d cols; it has %d cols", sheetName, len(input.AutomatedSheetColNameToIndex), len(header))
+		}
+		// check col headings and indexes
+		for col, index := range input.AutomatedSheetColNameToIndex {
+			if header[index] != input.AutomatedSheetColNameToHeading[col] {
+				return fmt.Errorf("Expected %s in col %d; got %s", input.AutomatedSheetColNameToHeading[col], index, header[index])
+			}
+		}
+	} else {
+		return fmt.Errorf("Invalid sheet %s in file s3://%s/%s", sheetName, input.Bucket, input.Key)
+	}
+	return nil
+}
+
+func validateSheets(f *excelize.File, input *Input) error {
+	sheetList := f.GetSheetList()
+	for _, group := range input.SheetGroups {
+		sheets := []string{group.SheetName, group.AutomatedSheetName}
+		for _, sheet := range sheets {
+			// check that sheet exists
+			if !contains(sheetList, sheet) {
+				return fmt.Errorf("sheet %s missing from file s3://%s/%s", sheet, input.Bucket, input.Key)
+			}
+
+			rows, err := f.GetRows(sheet)
+			if err != nil {
+				return err
+			}
+
+			// check if sheet is empty
+			if len(rows) == 0 {
+				return fmt.Errorf("sheet %s in file s3://%s/%s is empty; sheet must include header row", sheet, input.Bucket, input.Key)
+			}
+			// validate sheet columns
+			err = validateSheetCols(f, input, group, sheet)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func validateRow(f *excelize.File, sheet string, rowNum, usernameXCoord, passwordXCoord int) error {
 	// check if username or password is empty
 	username, err := getCellValue(f, sheet, usernameXCoord, rowNum)
@@ -48,17 +126,82 @@ func getHeaderToXCoord(headerRow []string) map[string]int {
 	return headerToXCoord
 }
 
-type usernameAndPassword struct {
-	Username, Password string
-}
-
-func getMACFinUsers(f *excelize.File, input *Input) ([]usernameAndPassword, error) {
-	rows, err := f.GetRows(input.SheetName)
-	if err != nil {
-		return nil, fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", input.SheetName, input.Bucket, input.Key, err)
+func deleteRows(f *excelize.File, sheet string, rowsToDelete []int) error {
+	sort.Ints(rowsToDelete)
+	for idx := len(rowsToDelete) - 1; idx >= 0; idx-- {
+		rowToDelete := toSheetCoord(rowsToDelete[idx])
+		err := f.RemoveRow(sheet, rowToDelete)
+		if err != nil {
+			return fmt.Errorf("failed removing row %d from %s sheet in file %s: %s", rowToDelete, sheet, f.Path, err)
+		}
 	}
 
-	users := []usernameAndPassword{}
+	err := f.Save()
+	if err != nil {
+		return fmt.Errorf("failed saving file %s after synchronizing automated sheet users to MACFin users: %s", f.Path, err)
+	}
+
+	return nil
+}
+
+// Remove duplicate MACFin usernames and write usernames to lowercase
+func removeMACFinUserDups(f *excelize.File, input *Input, env Environment) error {
+	sheetName := input.SheetGroups[env].SheetName
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		return fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", sheetName, input.Bucket, input.Key, err)
+	}
+
+	headerToXCoord := getHeaderToXCoord(rows[0])
+	usernameXCoord := headerToXCoord[input.UsernameHeader]
+	passwordXCoord := headerToXCoord[input.PasswordHeader]
+	rowOffset := input.RowOffset
+
+	users := make(map[string]bool, len(rows)-rowOffset)
+	rowsToDelete := []int{}
+	for idx := len(rows) - 1; idx >= rowOffset; idx-- {
+		err := validateRow(f, sheetName, idx, usernameXCoord, passwordXCoord)
+		if err != nil {
+			log.Printf("validating sheet %s, row %d: %s", sheetName, toSheetCoord(idx), err)
+			continue
+		}
+		if _, ok := users[strings.ToLower(rows[idx][usernameXCoord])]; ok {
+			rowsToDelete = append(rowsToDelete, idx)
+		} else {
+			users[strings.ToLower(rows[idx][usernameXCoord])] = true
+			writeCell(f, sheetName, usernameXCoord, idx, strings.ToLower(rows[idx][usernameXCoord]))
+		}
+	}
+
+	if len(rowsToDelete) > 0 {
+		err = deleteRows(f, sheetName, rowsToDelete)
+		if err != nil {
+			return fmt.Errorf("Error deleting duplicate users from sheet %s in file s3://%s/%s:%s", sheetName, input.Bucket, input.Key, err)
+		}
+		log.Printf("successfully deleted all duplicate users (%d) from %s in file s3://%s/%s", len(rowsToDelete), sheetName, input.Bucket, input.Key)
+	}
+
+	return nil
+}
+
+func removeDupsFromMACFinSheets(f *excelize.File, input *Input) error {
+	for env := range input.SheetGroups {
+		err := removeMACFinUserDups(f, input, env)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func getMACFinUsers(f *excelize.File, input *Input, env Environment) (map[string]PasswordRow, error) {
+	sheetName := input.SheetGroups[env].SheetName
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", sheetName, input.Bucket, input.Key, err)
+	}
+
+	users := make(map[string]PasswordRow)
 
 	headerToXCoord := getHeaderToXCoord(rows[0])
 	usernameXCoord := headerToXCoord[input.UsernameHeader]
@@ -66,19 +209,19 @@ func getMACFinUsers(f *excelize.File, input *Input) ([]usernameAndPassword, erro
 	rowOffset := input.RowOffset
 
 	for i, row := range rows[rowOffset:] {
-		err := validateRow(f, input.SheetName, i+rowOffset, usernameXCoord, passwordXCoord)
+		err := validateRow(f, sheetName, i+rowOffset, usernameXCoord, passwordXCoord)
 		if err != nil {
-			log.Printf("validating sheet %s, row %d: %s", input.SheetName, toSheetCoord(i+rowOffset), err)
+			log.Printf("validating sheet %s, row %d: %s", sheetName, toSheetCoord(i+rowOffset), err)
 			continue
 		}
-		users = append(users, usernameAndPassword{strings.ToLower(row[usernameXCoord]), row[passwordXCoord]})
+		users[strings.ToLower(row[usernameXCoord])] = PasswordRow{row[passwordXCoord], i + rowOffset}
 	}
 
 	return users, nil
 }
 
-func getManagedUsers(f *excelize.File, input *Input) (map[string]PasswordRow, error) {
-	automatedSheet := input.AutomatedSheetName
+func getManagedUsers(f *excelize.File, input *Input, env Environment) (map[string]PasswordRow, error) {
+	automatedSheet := input.SheetGroups[env].AutomatedSheetName
 	rows, err := f.GetRows(automatedSheet)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", automatedSheet, input.Bucket, input.Key, err)
@@ -92,7 +235,7 @@ func getManagedUsers(f *excelize.File, input *Input) (map[string]PasswordRow, er
 	for i, row := range rows[rowOffset:] {
 		userToPasswordRow[row[colUser]] = PasswordRow{
 			Password: row[colPassword],
-			Row:      i,
+			Row:      i + rowOffset,
 		}
 	}
 
@@ -100,13 +243,13 @@ func getManagedUsers(f *excelize.File, input *Input) (map[string]PasswordRow, er
 }
 
 // Sync PasswordManager usernames with MACFin users
-func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI) error {
-	macFinUsersToPasswords, err := getMACFinUsers(f, input)
+func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI, env Environment) error {
+	macFinUsersToPasswordRow, err := getMACFinUsers(f, input, env)
 	if err != nil {
 		return err
 	}
 
-	userToPasswordRow, err := getManagedUsers(f, input)
+	userToPasswordRow, err := getManagedUsers(f, input, env)
 	if err != nil {
 		return err
 	}
@@ -114,18 +257,13 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, clien
 	rowOffset := input.RowOffset
 	initialNumRows := len(userToPasswordRow) + rowOffset
 	numRows := initialNumRows
-	automatedSheet := input.AutomatedSheetName
+	automatedSheet := input.SheetGroups[env].AutomatedSheetName
 
-	usersFound := map[string]struct{}{}
 	// add new MACFin users to automatedSheet
-	for _, up := range macFinUsersToPasswords {
-		if _, ok := usersFound[up.Username]; ok {
-			continue
-		}
-		usersFound[up.Username] = struct{}{}
-		if _, ok := userToPasswordRow[up.Username]; !ok {
+	for mfUser, up := range macFinUsersToPasswordRow {
+		if _, ok := userToPasswordRow[mfUser]; !ok {
 			values := map[Column]string{
-				ColUser:      up.Username,
+				ColUser:      mfUser,
 				ColPassword:  up.Password,
 				ColPrevious:  up.Password,
 				ColTimestamp: "Rotate Now",
@@ -134,7 +272,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, clien
 			for name, idx := range input.AutomatedSheetColNameToIndex {
 				err := writeCell(f, automatedSheet, idx, numRows, values[name])
 				if err != nil {
-					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", up.Username, automatedSheet, f.Path, err)
+					return fmt.Errorf("failed adding new MACFin user %s to %s sheet in file %s: %s", mfUser, automatedSheet, f.Path, err)
 				}
 			}
 			numRows++
@@ -145,7 +283,7 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, clien
 	// get rows for deletion from automatedSheet
 	rowsToDelete := []int{}
 	for pwUser, pwRow := range userToPasswordRow {
-		if _, ok := usersFound[pwUser]; !ok {
+		if _, ok := macFinUsersToPasswordRow[pwUser]; !ok {
 			// pwUser is not in MACFin users; mark row for deletion from automatedSheet
 			rowsToDelete = append(rowsToDelete, pwRow.Row)
 			continue
@@ -153,13 +291,10 @@ func syncPasswordManagerUsersToMACFinUsers(f *excelize.File, input *Input, clien
 	}
 
 	// delete rows from automatedSheet that are marked for deletion
-	// iterate in descending order
-	sort.Ints(rowsToDelete)
-	for idx := len(rowsToDelete) - 1; idx >= 0; idx-- {
-		rowToDelete := toSheetCoord(rowsToDelete[idx] + rowOffset)
-		err := f.RemoveRow(automatedSheet, rowToDelete)
+	if len(rowsToDelete) > 0 {
+		err = deleteRows(f, automatedSheet, rowsToDelete)
 		if err != nil {
-			return fmt.Errorf("failed removing row %d from %s sheet in file %s: %s", rowToDelete, automatedSheet, f.Path, err)
+			return err
 		}
 	}
 
@@ -266,13 +401,14 @@ func sortRows(f *excelize.File, input *Input, sheetname string) error {
 }
 
 // Write new password to password column in the MACFin sheet
-func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI) error {
-	userToPasswordRow, err := getManagedUsers(f, input)
+func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI, env Environment) error {
+	userToPasswordRow, err := getManagedUsers(f, input, env)
 	if err != nil {
 		return err
 	}
 
-	rows, err := f.GetRows(input.SheetName)
+	sheetName := input.SheetGroups[env].SheetName
+	rows, err := f.GetRows(sheetName)
 	if err != nil {
 		return err
 	}
@@ -283,9 +419,9 @@ func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI) error
 	rowOffset := input.RowOffset
 
 	for i, row := range rows[rowOffset:] {
-		err := validateRow(f, input.SheetName, i+rowOffset, userX, passwordX)
+		err := validateRow(f, sheetName, i+rowOffset, userX, passwordX)
 		if err != nil {
-			log.Printf("validating sheet %s, row %d: %s", input.SheetName, toSheetCoord(i+rowOffset), err)
+			log.Printf("validating sheet %s, row %d: %s", sheetName, toSheetCoord(i+rowOffset), err)
 			continue
 		}
 
@@ -293,13 +429,13 @@ func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI) error
 		macPassword := row[passwordX]
 		if pwRow, ok := userToPasswordRow[strings.ToLower(user)]; ok {
 			if pwRow.Password != macPassword {
-				err := writeCell(f, input.SheetName, passwordX, i+rowOffset, pwRow.Password)
+				err := writeCell(f, sheetName, passwordX, i+rowOffset, pwRow.Password)
 				if err != nil {
-					return fmt.Errorf("Error setting new password for user %s in sheet %s in row %d: %s", user, input.SheetName, toSheetCoord(i+rowOffset), err)
+					return fmt.Errorf("Error setting new password for user %s in sheet %s in row %d: %s", user, sheetName, toSheetCoord(i+rowOffset), err)
 				}
 			}
 		} else {
-			return fmt.Errorf("macFin user %s missing from PasswordManager users; failed to update sheet %s with new passwords", user, input.SheetName)
+			return fmt.Errorf("macFin user %s missing from PasswordManager users; failed to update sheet %s with new passwords", user, sheetName)
 		}
 	}
 
@@ -307,7 +443,7 @@ func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI) error
 	if err != nil {
 		return fmt.Errorf("Error uploading file: %s", err)
 	}
-	log.Printf("successfully uploaded file to s3://%s/%s after updating sheet %s", input.Bucket, input.Key, input.SheetName)
+	log.Printf("successfully uploaded file to s3://%s/%s after processing sheet %s", input.Bucket, input.Key, sheetName)
 
 	return nil
 }
