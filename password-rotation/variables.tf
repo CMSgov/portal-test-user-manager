@@ -45,7 +45,7 @@ variable "schedule_task_expression" {
 variable "event_rule_enabled" {
   type        = bool
   description = "Whether the event rule that triggers the task is enabled"
-  default     = true
+  default     = false
 }
 
 variable "s3_bucket" {
