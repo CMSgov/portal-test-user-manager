@@ -30,7 +30,7 @@ const (
 )
 
 const (
-	maxPasswordAgeDays int = 30
+	maxPasswordAgeDays int = 28
 )
 
 const (
@@ -135,7 +135,9 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3C
 			}
 		}
 
-		if now.Before(lastRotated.AddDate(0, 0, maxPasswordAgeDays)) {
+		// determine whether rotation is needed based on year, month, day only (ignore time of day)
+		refDate := time.Date(lastRotated.Year(), lastRotated.Month(), lastRotated.Day(), 0, 0, 0, 0, time.UTC)
+		if now.Before(refDate.AddDate(0, 0, maxPasswordAgeDays)) {
 			log.Printf("%s: no rotation needed", row[colUser])
 			numNoRotation++
 			continue
