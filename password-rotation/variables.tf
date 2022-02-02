@@ -119,3 +119,35 @@ variable "idm_hostname_prod" {
   description = "Hostname for prod CMS Enterprise Portal IDM"
   default     = "idm.cms.gov"
 }
+
+# MAIL variables
+variable "smtp_host" {
+  type    = string
+  default = "internal-Enterpris-SMTPProd-I20YLD1GTM6L-357506541.us-east-1.elb.amazonaws.com"
+}
+
+variable "smtp_port" {
+  type    = string
+  default = "25"
+}
+
+variable "from_address" {
+  type    = string
+  default = "no-reply-macfin-ecs-job@cms.hhs.gov"
+}
+
+variable "sender_name" {
+  type    = string
+  default = "macfin-ecs-job"
+}
+
+variable "to_addresses" {
+  description = "comma-separated email addresses"
+  type    = string
+  default = "macfintestingteam@dcca.com"
+}
+
+variable "mail_enabled" {
+  type = string
+  default = "false"
+}

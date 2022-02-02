@@ -20,4 +20,6 @@ module "password_rotation" {
   sheet_name_dev  = "Portal-DEV"
   sheet_name_val  = "Portal-VAL"
   sheet_name_prod = "Portal-PROD"
+
+  mail_enabled = "false" // To mail the xlsx file, in addition to uploading it to S3, set to "true"
 }
