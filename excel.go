@@ -4,6 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -446,4 +449,43 @@ func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI, env E
 	log.Printf("successfully uploaded file to s3://%s/%s after processing sheet %s", input.Bucket, input.Key, sheetName)
 
 	return nil
+}
+
+// password-protect excel file
+func protectExcelWorkbook(filename string) (string, error) {
+	dir := filepath.Dir(filename)
+	outFilename := filepath.Join(dir, "protected-"+filepath.Base(filename))
+	cat := exec.Command("cat", filename)
+	excel := exec.Command("secure-spreadsheet", "--password", os.Getenv("WORKBOOKPASSWORD"), "--input-format", "xlsx")
+
+	file, err := os.Create(outFilename)
+	if err != nil {
+		return "", fmt.Errorf("Error creating excel file: %s err: %s", outFilename, err)
+	}
+	defer file.Close()
+
+	excel.Stdin, err = cat.StdoutPipe()
+	if err != nil {
+		return "", fmt.Errorf("Error when reading from cat command output: %s", err)
+	}
+
+	excel.Stdout = file
+
+	if err := excel.Start(); err != nil {
+		return "", fmt.Errorf("Error starting secure-spreadsheet command: %s", err)
+	}
+
+	if err := cat.Run(); err != nil {
+		return "", fmt.Errorf("Error running cat command: %v", err)
+	}
+
+	err = excel.Wait()
+	if err != nil {
+		return "", fmt.Errorf("Error waiting for command to complete: %s", err)
+	}
+
+	log.Printf("Successfully protected workbook file: %s", outFilename)
+
+	return outFilename, nil
+
 }

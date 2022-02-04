@@ -27,6 +27,10 @@
       {
         "valueFrom": "${automated_sheet_password_param_name}",
         "name": "AUTOMATEDSHEETPASSWORD"
+      },
+      {
+        "valueFrom": "${workbook_password_param_name}",
+        "name": "WORKBOOKPASSWORD"
       }
     ],
     "logConfiguration": {

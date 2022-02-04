@@ -161,12 +161,17 @@ func sendEmail(filename string) error {
 		return fmt.Errorf("Error sending email: %s", err)
 	}
 
+	protectedFilename, err := protectExcelWorkbook(filename)
+	if err != nil {
+		return err
+	}
+
 	setHeader(&headers, "From", fromAddress)
 	for _, address := range validatedToAddresses {
 		addHeader(&headers, "To", address)
 	}
 	setHeader(&headers, "Subject", mailSubject)
-	err = setBody(&headers, body, filename)
+	err = setBody(&headers, body, protectedFilename)
 	if err != nil {
 		return fmt.Errorf("Error sending email: %s", err)
 	}
