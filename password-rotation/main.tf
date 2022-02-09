@@ -1,7 +1,10 @@
+# documentation about iam_path and iam_boundary settings is documented here:
+# https://cloud.cms.gov/creating-identity-access-management-policies
+
 locals {
   awslogs_group = "/aws/ecs/${var.app_name}-${var.environment}-${var.task_name}"
   iam_path      = "/delegatedadmin/developer/"
-  iam_boundary  = "arn:aws:iam::037370603820:policy/cms-cloud-admin/ct-ado-poweruser-permissions-boundary-policy"
+  iam_boundary  = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/cms-cloud-admin/developer-boundary-policy"
 }
 
 data "aws_partition" "current" {}
