@@ -143,11 +143,11 @@ variable "sender_name" {
 
 variable "to_addresses" {
   description = "comma-separated email addresses"
-  type    = string
-  default = "macfintestingteam@dcca.com"
+  type        = string
+  default     = "macfintestingteam@dcca.com"
 }
 
 variable "mail_enabled" {
-  type = string
+  type    = string
   default = "false"
 }

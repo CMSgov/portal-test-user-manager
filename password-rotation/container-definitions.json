@@ -22,7 +22,6 @@
       {"name": "MAILSENDERNAME", "value": "${sender_name}" },
       {"name": "MAILTOADDRESSES", "value": "${to_addresses}" },
       {"name": "MAILENABLED", "value": "${mail_enabled}" }
-
     ],
     "secrets": [
       {
