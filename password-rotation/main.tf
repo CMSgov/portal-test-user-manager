@@ -1,5 +1,10 @@
+# documentation about iam_path and iam_boundary settings is documented here:
+# https://cloud.cms.gov/creating-identity-access-management-policies
+
 locals {
   awslogs_group = "/aws/ecs/${var.app_name}-${var.environment}-${var.task_name}"
+  iam_path      = "/delegatedadmin/developer/"
+  iam_boundary  = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/cms-cloud-admin/developer-boundary-policy"
 }
 
 data "aws_partition" "current" {}
@@ -26,6 +31,8 @@ data "aws_iam_policy_document" "events_assume_role_policy" {
 }
 
 resource "aws_iam_role" "cloudwatch_target_role" {
+  path                 = local.iam_path
+  permissions_boundary = local.iam_boundary
   name                 = "cw-target-role-${var.app_name}-${var.environment}-${var.task_name}"
   description          = "Role allowing CloudWatch Events to run the task"
   assume_role_policy   = data.aws_iam_policy_document.events_assume_role_policy.json
@@ -52,6 +59,8 @@ data "aws_iam_policy_document" "ecs_assume_role_policy" {
 # ECS task role
 
 resource "aws_iam_role" "task_role" {
+  path                 = local.iam_path
+  permissions_boundary = local.iam_boundary
   name                 = "ecs-task-role-${var.app_name}-${var.environment}-${var.task_name}"
   description          = "Role granting permissions to the ECS container task"
   assume_role_policy   = data.aws_iam_policy_document.ecs_assume_role_policy.json
@@ -67,6 +76,7 @@ data "aws_iam_policy_document" "s3_access" {
 }
 
 resource "aws_iam_policy" "s3_access" {
+  path        = local.iam_path
   name        = "${var.s3_bucket}-s3-access"
   description = "Policy granting access to the S3 bucket containing the test user spreadsheet"
   policy      = data.aws_iam_policy_document.s3_access.json
@@ -75,6 +85,8 @@ resource "aws_iam_policy" "s3_access" {
 # ECS task execution role
 
 resource "aws_iam_role" "task_execution_role" {
+  path                 = local.iam_path
+  permissions_boundary = local.iam_boundary
   name                 = "ecs-task-exec-role-${var.app_name}-${var.environment}-${var.task_name}"
   description          = "Role granting permissions to the ECS container agent/Docker daemon"
   assume_role_policy   = data.aws_iam_policy_document.ecs_assume_role_policy.json
@@ -91,6 +103,7 @@ data "aws_iam_policy_document" "parameter_store" {
 
 resource "aws_iam_policy" "parameter_store" {
   name        = "${var.app_name}-${var.environment}-${var.task_name}-parameter-store"
+  path        = local.iam_path
   description = "Policy granting access to parameter store"
   policy      = data.aws_iam_policy_document.parameter_store.json
 }
