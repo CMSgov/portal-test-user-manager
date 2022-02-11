@@ -14,8 +14,6 @@ import (
 	"time"
 
 	b64 "encoding/base64"
-
-	"github.com/xuri/excelize/v2"
 )
 
 const (
@@ -41,7 +39,7 @@ func addHeader(headers *textproto.MIMEHeader, key, value string) {
 }
 
 // create a multipart MIME message with text and file attachment
-func setBody(headers *textproto.MIMEHeader, body *bytes.Buffer, f *excelize.File) error {
+func setBody(headers *textproto.MIMEHeader, body *bytes.Buffer, filename string) error {
 
 	multipartType := "fixed"
 
@@ -66,7 +64,7 @@ func setBody(headers *textproto.MIMEHeader, body *bytes.Buffer, f *excelize.File
 	}
 
 	// add file attachment part
-	fp, err := os.Open(f.Path)
+	fp, err := os.Open(filename)
 	if err != nil {
 		return err
 	}
@@ -117,20 +115,17 @@ func toHeaderString(headers *textproto.MIMEHeader) string {
 }
 
 func validateRecipientAddresses(addresses []string) ([]string, error) {
-	// remove duplicate addresses
 	// log invalid address and continue
-	// if no valid address, set m.err
+	// if no valid address, return error
 	validAddresses := make([]string, 0)
 	for _, addr := range addresses {
 		if len(addr) > 0 {
 			a, err := mail.ParseAddress(addr)
 			if err != nil {
-				log.Printf("validating recipient address %s: %s", addr, err)
+				log.Printf("Info: validating recipient address %s: %s", addr, err)
 				continue
 			}
 			validAddresses = append(validAddresses, a.Address)
-		} else {
-			continue
 		}
 	}
 	if len(validAddresses) == 0 {
@@ -140,7 +135,7 @@ func validateRecipientAddresses(addresses []string) ([]string, error) {
 	return validAddresses, nil
 }
 
-func sendEmail(f *excelize.File) error {
+func sendEmail(filename string) error {
 
 	host := os.Getenv("MAILSMTPHOST")
 	port := os.Getenv("MAILSMTPPORT")
@@ -171,7 +166,7 @@ func sendEmail(f *excelize.File) error {
 		addHeader(&headers, "To", address)
 	}
 	setHeader(&headers, "Subject", mailSubject)
-	err = setBody(&headers, body, f)
+	err = setBody(&headers, body, filename)
 	if err != nil {
 		return fmt.Errorf("Error sending email: %s", err)
 	}
