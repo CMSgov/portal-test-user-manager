@@ -294,6 +294,14 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
 
       awslogs_group  = local.awslogs_group,
       awslogs_region = data.aws_region.current.name
+
+      smtp_port    = var.smtp_port
+      smtp_host    = var.smtp_host
+      from_address = var.from_address
+      sender_name  = var.sender_name
+      to_addresses = var.to_addresses
+      mail_enabled = var.mail_enabled
+
     }
   )
 }

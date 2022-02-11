@@ -242,6 +242,11 @@ func rotate(input *Input, envToPortal map[Environment]*Portal, client S3ClientAP
 		}
 
 	}
+
+	err = sendEmail(f.Path)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -15,7 +15,13 @@
       { "name": "PORTALHOSTNAMEPROD", "value": "${portal_hostname_prod}" },
       { "name": "IDMHOSTNAMEDEV", "value": "${idm_hostname_dev}" },
       { "name": "IDMHOSTNAMEVAL", "value": "${idm_hostname_val}" },
-      { "name": "IDMHOSTNAMEPROD", "value": "${idm_hostname_prod}" }
+      { "name": "IDMHOSTNAMEPROD", "value": "${idm_hostname_prod}" },
+      {"name": "MAILSMTPHOST", "value": "${smtp_host}" },
+      {"name": "MAILSMTPPORT", "value": "${smtp_port}" },
+      {"name": "MAILFROMADDRESS", "value": "${from_address}" },
+      {"name": "MAILSENDERNAME", "value": "${sender_name}" },
+      {"name": "MAILTOADDRESSES", "value": "${to_addresses}" },
+      {"name": "MAILENABLED", "value": "${mail_enabled}" }
     ],
     "secrets": [
       {
