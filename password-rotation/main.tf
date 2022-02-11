@@ -188,7 +188,7 @@ resource "aws_cloudwatch_metric_alarm" "error_count" {
 
 resource "aws_cloudwatch_log_metric_filter" "info_count" {
   name           = "${var.app_name}-info-count"
-  pattern        = "validating sheet"
+  pattern        = "Info"
   log_group_name = local.awslogs_group
 
   metric_transformation {

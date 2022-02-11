@@ -162,7 +162,7 @@ func removeMACFinUserDups(f *excelize.File, input *Input, env Environment) error
 	for idx := len(rows) - 1; idx >= rowOffset; idx-- {
 		err := validateRow(f, sheetName, idx, usernameXCoord, passwordXCoord)
 		if err != nil {
-			log.Printf("validating sheet %s, row %d: %s", sheetName, toSheetCoord(idx), err)
+			log.Printf("Info: validating sheet %s, row %d: %s", sheetName, toSheetCoord(idx), err)
 			continue
 		}
 		if _, ok := users[strings.ToLower(rows[idx][usernameXCoord])]; ok {
@@ -211,7 +211,7 @@ func getMACFinUsers(f *excelize.File, input *Input, env Environment) (map[string
 	for i, row := range rows[rowOffset:] {
 		err := validateRow(f, sheetName, i+rowOffset, usernameXCoord, passwordXCoord)
 		if err != nil {
-			log.Printf("validating sheet %s, row %d: %s", sheetName, toSheetCoord(i+rowOffset), err)
+			log.Printf("Info: validating sheet %s, row %d: %s", sheetName, toSheetCoord(i+rowOffset), err)
 			continue
 		}
 		users[strings.ToLower(row[usernameXCoord])] = PasswordRow{row[passwordXCoord], i + rowOffset}
@@ -421,7 +421,7 @@ func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI, env E
 	for i, row := range rows[rowOffset:] {
 		err := validateRow(f, sheetName, i+rowOffset, userX, passwordX)
 		if err != nil {
-			log.Printf("validating sheet %s, row %d: %s", sheetName, toSheetCoord(i+rowOffset), err)
+			log.Printf("Info: validating sheet %s, row %d: %s", sheetName, toSheetCoord(i+rowOffset), err)
 			continue
 		}
 
