@@ -456,11 +456,11 @@ func protectExcelWorkbook(filename string) (string, error) {
 	dir := filepath.Dir(filename)
 	outFilename := filepath.Join(dir, "protected-"+filepath.Base(filename))
 
-	_, err := exec.LookPath("secure-spreadsheet")
+	cmdPath, err := exec.LookPath("secure-spreadsheet")
 	if err != nil {
 		return "", fmt.Errorf("Error resolving command name: %s", err)
 	}
-	secureSpreadsheet := exec.Command("secure-spreadsheet", "--password", os.Getenv("WORKBOOKPASSWORD"), "--input-format", "xlsx")
+	secureSpreadsheet := exec.Command(cmdPath, "--password", os.Getenv("WORKBOOKPASSWORD"), "--input-format", "xlsx")
 
 	inFile, err := os.Open(filename)
 	if err != nil {
