@@ -96,7 +96,7 @@ resource "aws_iam_role" "task_execution_role" {
 data "aws_iam_policy_document" "parameter_store" {
   statement {
     actions   = ["ssm:GetParameters"]
-    resources = ["${aws_ssm_parameter.automated_sheet_password.arn}", ]
+    resources = ["${aws_ssm_parameter.automated_sheet_password.arn}", "${aws_ssm_parameter.workbook_password.arn}", ]
     effect    = "Allow"
   }
 }
@@ -279,6 +279,7 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
       username_header                     = var.username_header
       password_header                     = var.password_header
       automated_sheet_password_param_name = aws_ssm_parameter.automated_sheet_password.name
+      workbook_password_param_name        = aws_ssm_parameter.workbook_password.name
 
       sheet_name_dev  = var.sheet_name_dev
       sheet_name_val  = var.sheet_name_val
@@ -316,6 +317,16 @@ resource "aws_cloudwatch_log_group" "ecs" {
 
 resource "aws_ssm_parameter" "automated_sheet_password" {
   name  = "${var.app_name}-${var.environment}-automated-sheet-password"
+  type  = "SecureString"
+  value = "set_manually_after_creation"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
+resource "aws_ssm_parameter" "workbook_password" {
+  name  = "${var.app_name}-${var.environment}-workbook-password"
   type  = "SecureString"
   value = "set_manually_after_creation"
 

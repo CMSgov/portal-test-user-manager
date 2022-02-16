@@ -1,6 +1,6 @@
-variable "account_id" {
-  type        = string
-  description = "Account ID that will be pulling the image"
+variable "principal_arns" {
+  type        = list(string)
+  description = "ARNs to grant ECR access to"
 }
 
 variable "repo_name" {
