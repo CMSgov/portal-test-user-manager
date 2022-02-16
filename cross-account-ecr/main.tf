@@ -17,7 +17,7 @@ data "aws_iam_policy_document" "cross_account_access" {
     ]
     principals {
       type        = "AWS"
-      identifiers = ["arn:aws:iam::${var.account_id}:root"]
+      identifiers = var.principal_arns
     }
     effect = "Allow"
   }
