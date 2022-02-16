@@ -1,7 +1,7 @@
 module "cross_account_ecr" {
   source = "../cross-account-ecr"
 
-  account_id = "037370603820"
+  principal_arns = ["arn:aws:iam::037370603820:root", "arn:aws:iam::741306476019:root"] // macbis-dev, MACFin
   repo_name  = "password-rotation"
 }
 
