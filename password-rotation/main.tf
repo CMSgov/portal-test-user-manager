@@ -353,3 +353,12 @@ resource "aws_s3_bucket" "spreadsheet" {
     }
   }
 }
+
+resource "aws_s3_bucket_public_access_block" "spreadsheet" {
+  bucket = aws_s3_bucket.spreadsheet.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
