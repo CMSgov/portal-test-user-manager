@@ -218,7 +218,8 @@ resource "aws_cloudwatch_metric_alarm" "info_count" {
 ## SNS ##
 
 resource "aws_sns_topic" "password_rotation" {
-  name = var.app_name
+  name              = var.app_name
+  kms_master_key_id = "alias/aws/sns"
 }
 
 ## ECS ##
