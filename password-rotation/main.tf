@@ -362,3 +362,27 @@ resource "aws_s3_bucket_public_access_block" "spreadsheet" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
+
+resource "aws_s3_bucket_policy" "ssl_only" {
+  bucket = aws_s3_bucket.spreadsheet.id
+  policy = data.aws_iam_policy_document.ssl_only.json
+}
+
+data "aws_iam_policy_document" "ssl_only" {
+  statement {
+    actions   = ["s3:*"]
+    resources = ["arn:aws:s3:::${var.s3_bucket}", "arn:aws:s3:::${var.s3_bucket}/*"]
+    effect    = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
