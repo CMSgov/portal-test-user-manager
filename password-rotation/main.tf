@@ -73,6 +73,17 @@ data "aws_iam_policy_document" "s3_access" {
     resources = ["arn:aws:s3:::${var.s3_bucket}/${var.s3_key}", ]
     effect    = "Allow"
   }
+
+  statement {
+    actions   = ["s3:*"]
+    resources = ["arn:aws:s3:::${var.s3_bucket}", "arn:aws:s3:::${var.s3_bucket}/*"]
+    effect    = "Deny"
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
 }
 
 resource "aws_iam_policy" "s3_access" {
