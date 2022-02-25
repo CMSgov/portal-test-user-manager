@@ -218,7 +218,8 @@ resource "aws_cloudwatch_metric_alarm" "info_count" {
 ## SNS ##
 
 resource "aws_sns_topic" "password_rotation" {
-  name = var.app_name
+  name              = var.app_name
+  kms_master_key_id = "alias/aws/sns"
 }
 
 ## ECS ##
@@ -349,6 +350,39 @@ resource "aws_s3_bucket" "spreadsheet" {
       apply_server_side_encryption_by_default {
         sse_algorithm = "AES256"
       }
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "spreadsheet" {
+  bucket = aws_s3_bucket.spreadsheet.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_policy" "ssl_only" {
+  bucket = aws_s3_bucket.spreadsheet.id
+  policy = data.aws_iam_policy_document.ssl_only.json
+}
+
+data "aws_iam_policy_document" "ssl_only" {
+  statement {
+    actions   = ["s3:*"]
+    resources = ["arn:aws:s3:::${var.s3_bucket}", "arn:aws:s3:::${var.s3_bucket}/*"]
+    effect    = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
     }
   }
 }
