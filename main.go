@@ -7,6 +7,7 @@ import (
 	"net/http/cookiejar"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/xuri/excelize/v2"
@@ -60,6 +61,7 @@ type Portal struct {
 type SheetGroup struct {
 	AutomatedSheetName string // sheet managed by application
 	SheetName          string
+	EnvSheetNames      []string
 }
 
 type Creds struct {
@@ -243,6 +245,15 @@ func rotate(input *Input, envToPortal map[Environment]*Portal, client S3ClientAP
 
 	}
 
+	if os.Getenv("UPDATEENVSHEETSENABLED") == "true" {
+		for env := range envToPortal {
+			err := updateEnvSheets(f, input, env, client)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	err = sendEmail(f.Path)
 	if err != nil {
 		return err
@@ -287,14 +298,17 @@ func main() {
 			dev: {
 				AutomatedSheetName: "PasswordManager-DEV",
 				SheetName:          os.Getenv("MACFINSHEETNAMEDEV"),
+				EnvSheetNames:      strings.Split(os.Getenv("DEVPORTALENVSHEETNAMES"), ","),
 			},
 			val: {
 				AutomatedSheetName: "PasswordManager-VAL",
 				SheetName:          os.Getenv("MACFINSHEETNAMEVAL"),
+				EnvSheetNames:      strings.Split(os.Getenv("VALPORTALENVSHEETNAMES"), ","),
 			},
 			prod: {
 				AutomatedSheetName: "PasswordManager-PROD",
 				SheetName:          os.Getenv("MACFINSHEETNAMEPROD"),
+				EnvSheetNames:      strings.Split(os.Getenv("PRODPORTALENVSHEETNAMES"), ","),
 			},
 		},
 	}
