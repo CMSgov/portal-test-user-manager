@@ -5,7 +5,11 @@ A Terraform module which deploys a scheduled ECS task on a cron schedule.  This 
 ## Usage
 See [variables.tf](variables.tf) for variable descriptions.
 To enable the scheduled task to run, uncomment `event_rule_enabled = true`. To disable it, comment out the line.
-To enable the application to send email, uncomment `mail_enabled = "true" . To disable it, comment out the line.
+To enable the application to send email, uncomment `mail_enabled = "true"` . To disable it, comment out the line.
+
+### Configure the application to update passwords in each sheet associated with each portal.
+
+To enable the application to update the sheets associated with each portal, uncomment `update_env_sheets_enabled = "true"`
 ```
 module "password-rotation" {
   source      = "github.com/CMSgov/portal-test-user-manager//password-rotation
@@ -28,6 +32,12 @@ module "password-rotation" {
 
   # mail_enabled = "true"
   to_addresses = "macfintestingteam@dcca.com" // Separate multiple addresses with a comma.
+
+  # update_env_sheets_enabled = "true"
+
+  devportal_env_sheet_names = "" # For ex: "DEV,TEST,IMPL,DEVP"
+  valportal_env_sheet_names = "" # For ex: "TRAINING,IMPLP"
+  prodportal_env_sheet_names = "" # For ex: "PROD"
 }
 ```
 

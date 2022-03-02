@@ -21,7 +21,11 @@
       {"name": "MAILFROMADDRESS", "value": "${from_address}" },
       {"name": "MAILSENDERNAME", "value": "${sender_name}" },
       {"name": "MAILTOADDRESSES", "value": "${to_addresses}" },
-      {"name": "MAILENABLED", "value": "${mail_enabled}" }
+      {"name": "MAILENABLED", "value": "${mail_enabled}" },
+      {"name": "DEVPORTALENVSHEETNAMES", "value": "${devportal_env_sheet_names}" },
+      {"name": "VALPORTALENVSHEETNAMES",  "value": "${valportal_env_sheet_names}" },
+      {"name": "PRODPORTALENVSHEETNAMES",  "value": "${prodportal_env_sheet_names}" },
+      {"name": "UPDATEENVSHEETSENABLED", "value": "${update_env_sheets_enabled}" }
     ],
     "secrets": [
       {

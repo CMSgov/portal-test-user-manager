@@ -151,3 +151,26 @@ variable "mail_enabled" {
   type    = string
   default = "false"
 }
+
+variable "devportal_env_sheet_names" {
+  description = "comma-separated sheet names"
+  type        = string
+  default     = ""
+}
+
+variable "valportal_env_sheet_names" {
+  description = "comma-separated sheet names"
+  type        = string
+  default     = ""
+}
+
+variable "prodportal_env_sheet_names" {
+  description = "comma-separated sheet names"
+  type        = string
+  default     = ""
+}
+
+variable "update_env_sheets_enabled" {
+  type    = string
+  default = "false"
+}
