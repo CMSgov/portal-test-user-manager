@@ -8,8 +8,13 @@ To enable the scheduled task to run, uncomment `event_rule_enabled = true`. To d
 To enable the application to send email, uncomment `mail_enabled = "true"` . To disable it, comment out the line.
 
 ### Configure the application to update passwords in each sheet associated with each portal.
+Each portal may be associated with 0 or more sheets used for running tests. Each test sheet contains usernames and passwords. The application updates all passwords in each test sheet if the test sheets are configured for each portal.
 
-To enable the application to update the sheets associated with each portal, uncomment `update_env_sheets_enabled = "true"`
+For example, the dev portal may be associated with 4 sheets used to run tests. The test sheets are named
+DEV, TEST, IMPL, DEVP. By associatng each portal sheet with the test sheets, the application updates usernames in the test sheets with the current password.
+For this example, set the variable `devportal_env_sheet_names` to a string of comma-separated sheet names.
+
+If the portal has no associated sheets then set the variable to an empty string `""` or remove the variable from the module since it's default value is `""`.
 ```
 module "password-rotation" {
   source      = "github.com/CMSgov/portal-test-user-manager//password-rotation

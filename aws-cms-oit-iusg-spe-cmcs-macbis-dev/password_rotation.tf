@@ -24,8 +24,6 @@ module "password_rotation" {
   mail_enabled = "false" // To mail the xlsx file, in addition to uploading it to S3, set to "true"
   to_addresses = "macfintestingteam@dcca.com"
 
-  update_env_sheets_enabled = "true"
-
   devportal_env_sheet_names  = "DEV,TEST,IMPL,DEVP"
   valportal_env_sheet_names  = "TRAINING,IMPLP"
   prodportal_env_sheet_names = "PROD"

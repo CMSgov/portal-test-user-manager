@@ -304,7 +304,6 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
       to_addresses = var.to_addresses
       mail_enabled = var.mail_enabled
 
-      update_env_sheets_enabled  = var.update_env_sheets_enabled
       devportal_env_sheet_names  = var.devportal_env_sheet_names
       valportal_env_sheet_names  = var.valportal_env_sheet_names
       prodportal_env_sheet_names = var.prodportal_env_sheet_names

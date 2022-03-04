@@ -24,8 +24,7 @@
       {"name": "MAILENABLED", "value": "${mail_enabled}" },
       {"name": "DEVPORTALENVSHEETNAMES", "value": "${devportal_env_sheet_names}" },
       {"name": "VALPORTALENVSHEETNAMES",  "value": "${valportal_env_sheet_names}" },
-      {"name": "PRODPORTALENVSHEETNAMES",  "value": "${prodportal_env_sheet_names}" },
-      {"name": "UPDATEENVSHEETSENABLED", "value": "${update_env_sheets_enabled}" }
+      {"name": "PRODPORTALENVSHEETNAMES",  "value": "${prodportal_env_sheet_names}" }
     ],
     "secrets": [
       {

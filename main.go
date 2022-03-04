@@ -245,12 +245,10 @@ func rotate(input *Input, envToPortal map[Environment]*Portal, client S3ClientAP
 
 	}
 
-	if os.Getenv("UPDATEENVSHEETSENABLED") == "true" {
-		for env := range envToPortal {
-			err := updateEnvSheets(f, input, env, client)
-			if err != nil {
-				return err
-			}
+	for env := range envToPortal {
+		err := updateEnvSheets(f, input, env, client)
+		if err != nil {
+			return err
 		}
 	}
 

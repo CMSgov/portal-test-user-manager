@@ -170,7 +170,3 @@ variable "prodportal_env_sheet_names" {
   default     = ""
 }
 
-variable "update_env_sheets_enabled" {
-  type    = string
-  default = "false"
-}

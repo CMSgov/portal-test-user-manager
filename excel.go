@@ -113,7 +113,7 @@ func updateEnvSheets(f *excelize.File, input *Input, env Environment, client S3C
 				return fmt.Errorf("sheet %s in file s3://%s/%s does not contain header %s in top row", sheet, input.Bucket, input.Key, input.PasswordHeader)
 			}
 
-			headerToXCoord := getHeaderToXCoord(rows[0])
+			headerToXCoord := getHeaderToXCoord(header)
 			userX := headerToXCoord[input.UsernameHeader]
 			passwordX := headerToXCoord[input.PasswordHeader]
 			sheetIsUpdated := false
