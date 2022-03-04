@@ -7,9 +7,9 @@
       { "name": "KEY", "value": "${s3_key}" },
       { "name": "USERNAMEHEADER", "value": "${username_header}" },
       { "name": "PASSWORDHEADER", "value": "${password_header}" },
-      { "name": "MACFINSHEETNAMEDEV", "value": "${sheet_name_dev}" },
-      { "name": "MACFINSHEETNAMEVAL", "value": "${sheet_name_val}" },
-      { "name": "MACFINSHEETNAMEPROD", "value": "${sheet_name_prod}" },
+      { "name": "PORTALSHEETNAMEDEV", "value": "${portal_sheet_name_dev}" },
+      { "name": "PORTALSHEETNAMEVAL", "value": "${portal_sheet_name_val}" },
+      { "name": "PORTALSHEETNAMEPROD", "value": "${portal_sheet_name_prod}" },
       { "name": "PORTALHOSTNAMEDEV", "value": "${portal_hostname_dev}" },
       { "name": "PORTALHOSTNAMEVAL", "value": "${portal_hostname_val}" },
       { "name": "PORTALHOSTNAMEPROD", "value": "${portal_hostname_prod}" },
@@ -22,9 +22,9 @@
       {"name": "MAILSENDERNAME", "value": "${sender_name}" },
       {"name": "MAILTOADDRESSES", "value": "${to_addresses}" },
       {"name": "MAILENABLED", "value": "${mail_enabled}" },
-      {"name": "DEVPORTALENVSHEETNAMES", "value": "${devportal_env_sheet_names}" },
-      {"name": "VALPORTALENVSHEETNAMES",  "value": "${valportal_env_sheet_names}" },
-      {"name": "PRODPORTALENVSHEETNAMES",  "value": "${prodportal_env_sheet_names}" }
+      {"name": "DEVPORTALTESTINGSHEETNAMES", "value": "${devportal_testing_sheet_names}" },
+      {"name": "VALPORTALTESTINGSHEETNAMES",  "value": "${valportal_testing_sheet_names}" },
+      {"name": "PRODPORTALTESTINGSHEETNAMES",  "value": "${prodportal_testing_sheet_names}" }
     ],
     "secrets": [
       {

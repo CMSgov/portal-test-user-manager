@@ -33,7 +33,7 @@ func contains(items []string, item string) bool {
 }
 
 func validateSheetCols(f *excelize.File, input *Input, group SheetGroup, sheetName string) error {
-	if sheetName == group.SheetName {
+	if sheetName == group.PortalSheetName {
 		// validate MACFin sheet cols
 		rows, err := f.GetRows(sheetName)
 		if err != nil {
@@ -78,11 +78,11 @@ func updateEnvSheets(f *excelize.File, input *Input, env Environment, client S3C
 		if err != nil {
 			return err
 		}
-		for _, sh := range group.EnvSheetNames {
+		for _, sh := range group.TestingSheetNames {
 			sheet := strings.TrimSpace(sh)
 
 			// if environment variable that sets sheet names for this environment is not configured, continue
-			if len(group.EnvSheetNames) == 1 && sheet == "" {
+			if len(group.TestingSheetNames) == 1 && sheet == "" {
 				continue
 			}
 
@@ -162,7 +162,7 @@ func updateEnvSheets(f *excelize.File, input *Input, env Environment, client S3C
 func validateSheets(f *excelize.File, input *Input) error {
 	sheetList := f.GetSheetList()
 	for _, group := range input.SheetGroups {
-		sheets := []string{group.SheetName, group.AutomatedSheetName}
+		sheets := []string{group.PortalSheetName, group.AutomatedSheetName}
 		for _, sheet := range sheets {
 			// check that sheet exists
 			if !contains(sheetList, sheet) {
@@ -237,7 +237,7 @@ func deleteRows(f *excelize.File, sheet string, rowsToDelete []int) error {
 
 // Remove duplicate MACFin usernames and write usernames to lowercase
 func removeMACFinUserDups(f *excelize.File, input *Input, env Environment) error {
-	sheetName := input.SheetGroups[env].SheetName
+	sheetName := input.SheetGroups[env].PortalSheetName
 	rows, err := f.GetRows(sheetName)
 	if err != nil {
 		return fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", sheetName, input.Bucket, input.Key, err)
@@ -286,7 +286,7 @@ func removeDupsFromMACFinSheets(f *excelize.File, input *Input) error {
 }
 
 func getMACFinUsers(f *excelize.File, input *Input, env Environment) (map[string]PasswordRow, error) {
-	sheetName := input.SheetGroups[env].SheetName
+	sheetName := input.SheetGroups[env].PortalSheetName
 	rows, err := f.GetRows(sheetName)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", sheetName, input.Bucket, input.Key, err)
@@ -498,7 +498,7 @@ func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI, env E
 		return err
 	}
 
-	sheetName := input.SheetGroups[env].SheetName
+	sheetName := input.SheetGroups[env].PortalSheetName
 	rows, err := f.GetRows(sheetName)
 	if err != nil {
 		return err

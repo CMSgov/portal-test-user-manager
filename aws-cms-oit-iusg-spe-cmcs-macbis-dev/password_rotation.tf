@@ -17,14 +17,14 @@ module "password_rotation" {
   username_header = "UserName"
   password_header = "Password"
 
-  sheet_name_dev  = "Portal-DEV"
-  sheet_name_val  = "Portal-VAL"
-  sheet_name_prod = "Portal-PROD"
+  portal_sheet_name_dev  = "Portal-DEV"
+  portal_sheet_name_val  = "Portal-VAL"
+  portal_sheet_name_prod = "Portal-PROD"
 
   mail_enabled = "false" // To mail the xlsx file, in addition to uploading it to S3, set to "true"
   to_addresses = "macfintestingteam@dcca.com"
 
-  devportal_env_sheet_names  = "DEV,TEST,IMPL,DEVP"
-  valportal_env_sheet_names  = "TRAINING,IMPLP"
-  prodportal_env_sheet_names = "PROD"
+  devportal_testing_sheet_names  = "DEV,TEST,IMPL,DEVP"
+  valportal_testing_sheet_names  = "TRAINING,IMPLP"
+  prodportal_testing_sheet_names = "PROD"
 }

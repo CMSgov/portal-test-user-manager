@@ -60,8 +60,8 @@ type Portal struct {
 
 type SheetGroup struct {
 	AutomatedSheetName string // sheet managed by application
-	SheetName          string
-	EnvSheetNames      []string
+	PortalSheetName    string
+	TestingSheetNames  []string
 }
 
 type Creds struct {
@@ -86,7 +86,7 @@ func resetPasswords(f *excelize.File, input *Input, portal *Portal, s3Client S3C
 		return err
 	}
 
-	sheetName := input.SheetGroups[env].SheetName
+	sheetName := input.SheetGroups[env].PortalSheetName
 	mcFinUsersToPasswordRow, err := getMACFinUsers(f, input, env)
 	if err != nil {
 		return err
@@ -295,18 +295,18 @@ func main() {
 		SheetGroups: map[Environment]SheetGroup{
 			dev: {
 				AutomatedSheetName: "PasswordManager-DEV",
-				SheetName:          os.Getenv("MACFINSHEETNAMEDEV"),
-				EnvSheetNames:      strings.Split(os.Getenv("DEVPORTALENVSHEETNAMES"), ","),
+				PortalSheetName:    os.Getenv("PORTALSHEETNAMEDEV"),
+				TestingSheetNames:  strings.Split(os.Getenv("DEVPORTALTESTINGSHEETNAMES"), ","),
 			},
 			val: {
 				AutomatedSheetName: "PasswordManager-VAL",
-				SheetName:          os.Getenv("MACFINSHEETNAMEVAL"),
-				EnvSheetNames:      strings.Split(os.Getenv("VALPORTALENVSHEETNAMES"), ","),
+				PortalSheetName:    os.Getenv("PORTALSHEETNAMEVAL"),
+				TestingSheetNames:  strings.Split(os.Getenv("VALPORTALTESTINGSHEETNAMES"), ","),
 			},
 			prod: {
 				AutomatedSheetName: "PasswordManager-PROD",
-				SheetName:          os.Getenv("MACFINSHEETNAMEPROD"),
-				EnvSheetNames:      strings.Split(os.Getenv("PRODPORTALENVSHEETNAMES"), ","),
+				PortalSheetName:    os.Getenv("PORTALSHEETNAMEPROD"),
+				TestingSheetNames:  strings.Split(os.Getenv("PRODPORTALTESTINGSHEETNAMES"), ","),
 			},
 		},
 	}

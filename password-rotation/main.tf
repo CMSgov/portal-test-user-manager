@@ -282,9 +282,9 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
       automated_sheet_password_param_name = aws_ssm_parameter.automated_sheet_password.name
       workbook_password_param_name        = aws_ssm_parameter.workbook_password.name
 
-      sheet_name_dev  = var.sheet_name_dev
-      sheet_name_val  = var.sheet_name_val
-      sheet_name_prod = var.sheet_name_prod
+      portal_sheet_name_dev  = var.portal_sheet_name_dev
+      portal_sheet_name_val  = var.portal_sheet_name_val
+      portal_sheet_name_prod = var.portal_sheet_name_prod
 
       portal_hostname_dev  = var.portal_hostname_dev
       portal_hostname_val  = var.portal_hostname_val
@@ -304,9 +304,9 @@ resource "aws_ecs_task_definition" "scheduled_task_def" {
       to_addresses = var.to_addresses
       mail_enabled = var.mail_enabled
 
-      devportal_env_sheet_names  = var.devportal_env_sheet_names
-      valportal_env_sheet_names  = var.valportal_env_sheet_names
-      prodportal_env_sheet_names = var.prodportal_env_sheet_names
+      devportal_testing_sheet_names  = var.devportal_testing_sheet_names
+      valportal_testing_sheet_names  = var.valportal_testing_sheet_names
+      prodportal_testing_sheet_names = var.prodportal_testing_sheet_names
 
     }
   )
