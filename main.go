@@ -246,7 +246,7 @@ func rotate(input *Input, envToPortal map[Environment]*Portal, client S3ClientAP
 	}
 
 	for env := range envToPortal {
-		err := updateEnvSheets(f, input, env, client)
+		err := updateTestingSheets(f, input, env, client)
 		if err != nil {
 			return err
 		}

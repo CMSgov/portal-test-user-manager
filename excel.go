@@ -71,7 +71,7 @@ func validateSheetCols(f *excelize.File, input *Input, group SheetGroup, sheetNa
 	return nil
 }
 
-func updateEnvSheets(f *excelize.File, input *Input, env Environment, client S3ClientAPI) error {
+func updateTestingSheets(f *excelize.File, input *Input, env Environment, client S3ClientAPI) error {
 	sheetList := f.GetSheetList()
 	if group, ok := input.SheetGroups[env]; ok {
 		usernameToPasswordRow, err := getMACFinUsers(f, input, env)
