@@ -33,7 +33,7 @@ func contains(items []string, item string) bool {
 }
 
 func validateSheetCols(f *excelize.File, input *Input, group SheetGroup, sheetName string) error {
-	if sheetName == group.SheetName {
+	if sheetName == group.PortalSheetName {
 		// validate MACFin sheet cols
 		rows, err := f.GetRows(sheetName)
 		if err != nil {
@@ -71,10 +71,102 @@ func validateSheetCols(f *excelize.File, input *Input, group SheetGroup, sheetNa
 	return nil
 }
 
+func getTestingSheets(envVar string) []string {
+	sheets := os.Getenv(envVar)
+	if sheets == "" {
+		return []string{}
+	}
+
+	return strings.Split(sheets, ",")
+}
+
+func updateTestingSheets(f *excelize.File, input *Input, env Environment, client S3ClientAPI) error {
+	sheetList := f.GetSheetList()
+	if group, ok := input.SheetGroups[env]; ok {
+		usernameToPasswordRow, err := getMACFinUsers(f, input, env)
+		if err != nil {
+			return err
+		}
+		for _, sh := range group.TestingSheetNames {
+			sheet := strings.TrimSpace(sh)
+
+			// if sheet is not in file, continue
+			if !contains(sheetList, sheet) {
+				log.Printf("Info: sheet %q not found in file s3://%s/%s", sheet, input.Bucket, input.Key)
+				continue
+			}
+
+			rows, err := f.GetRows(sheet)
+			if err != nil {
+				return err
+			}
+
+			// if sheet is empty, continue
+			if len(rows) == 0 {
+				continue
+			}
+
+			// if headers are invalid, return error
+			header := rows[0]
+			// check for username header
+			if !contains(header, input.UsernameHeader) {
+				return fmt.Errorf("sheet %s in file s3://%s/%s does not contain header %s in top row", sheet, input.Bucket, input.Key, input.UsernameHeader)
+			}
+			// check for password header
+			if !contains(header, input.PasswordHeader) {
+				return fmt.Errorf("sheet %s in file s3://%s/%s does not contain header %s in top row", sheet, input.Bucket, input.Key, input.PasswordHeader)
+			}
+
+			headerToXCoord := getHeaderToXCoord(header)
+			userX := headerToXCoord[input.UsernameHeader]
+			passwordX := headerToXCoord[input.PasswordHeader]
+			sheetIsUpdated := false
+			for i, row := range rows[input.RowOffset:] {
+				if len(row) < userX+1 {
+					// no username
+					continue
+				}
+				if len(row) < passwordX+1 {
+					// row is shorter than passwordX
+					continue
+				}
+
+				username := strings.ToLower(row[userX])
+				password := row[passwordX]
+				if passwordRow, ok := usernameToPasswordRow[username]; ok {
+					portalPassword := passwordRow.Password
+					if password != portalPassword {
+						// update password
+						err := writeCell(f, sheet, passwordX, i+input.RowOffset, portalPassword)
+						if err != nil {
+							return fmt.Errorf("Error writing new password to %s sheet, row %d in file s3://%s/%s", sheet, toSheetCoord(i+input.RowOffset), input.Bucket, input.Key)
+						}
+						sheetIsUpdated = true
+					}
+				}
+			}
+
+			if sheetIsUpdated {
+				log.Printf("successfully updated sheet %s in file s3://%s/%s", sheet, input.Bucket, input.Key)
+
+				// upload file after every sheet
+				err = uploadFile(f, input.Bucket, input.Key, client)
+				if err != nil {
+					return fmt.Errorf("Error uploading file to s3://%s/%s after updating sheet %s: %s", input.Bucket, input.Key, sheet, err)
+				}
+
+				log.Printf("successfully uploaded file to s3://%s/%s after updating sheet %s", input.Bucket, input.Key, sheet)
+			}
+		}
+	}
+
+	return nil
+}
+
 func validateSheets(f *excelize.File, input *Input) error {
 	sheetList := f.GetSheetList()
 	for _, group := range input.SheetGroups {
-		sheets := []string{group.SheetName, group.AutomatedSheetName}
+		sheets := []string{group.PortalSheetName, group.AutomatedSheetName}
 		for _, sheet := range sheets {
 			// check that sheet exists
 			if !contains(sheetList, sheet) {
@@ -149,7 +241,7 @@ func deleteRows(f *excelize.File, sheet string, rowsToDelete []int) error {
 
 // Remove duplicate MACFin usernames and write usernames to lowercase
 func removeMACFinUserDups(f *excelize.File, input *Input, env Environment) error {
-	sheetName := input.SheetGroups[env].SheetName
+	sheetName := input.SheetGroups[env].PortalSheetName
 	rows, err := f.GetRows(sheetName)
 	if err != nil {
 		return fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", sheetName, input.Bucket, input.Key, err)
@@ -198,7 +290,7 @@ func removeDupsFromMACFinSheets(f *excelize.File, input *Input) error {
 }
 
 func getMACFinUsers(f *excelize.File, input *Input, env Environment) (map[string]PasswordRow, error) {
-	sheetName := input.SheetGroups[env].SheetName
+	sheetName := input.SheetGroups[env].PortalSheetName
 	rows, err := f.GetRows(sheetName)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting rows from %s in s3://%s/%s: %s", sheetName, input.Bucket, input.Key, err)
@@ -410,7 +502,7 @@ func updateMACFinUsers(f *excelize.File, input *Input, client S3ClientAPI, env E
 		return err
 	}
 
-	sheetName := input.SheetGroups[env].SheetName
+	sheetName := input.SheetGroups[env].PortalSheetName
 	rows, err := f.GetRows(sheetName)
 	if err != nil {
 		return err

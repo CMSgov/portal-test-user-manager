@@ -68,19 +68,19 @@ variable "password_header" {
   description = "Password header for the test user spreadsheet"
 }
 
-variable "sheet_name_dev" {
+variable "portal_sheet_name_dev" {
   type        = string
-  description = "Sheet name for the dev test user spreadsheet"
+  description = "Sheet name for the dev portal"
 }
 
-variable "sheet_name_val" {
+variable "portal_sheet_name_val" {
   type        = string
-  description = "Sheet name for the val test user spreadsheet"
+  description = "Sheet name for the val portal"
 }
 
-variable "sheet_name_prod" {
+variable "portal_sheet_name_prod" {
   type        = string
-  description = "Sheet name for the prod test user spreadsheet"
+  description = "Sheet name for the prod portal"
 }
 
 
@@ -151,3 +151,22 @@ variable "mail_enabled" {
   type    = string
   default = "false"
 }
+
+variable "devportal_testing_sheet_names" {
+  description = "comma-separated sheet names"
+  type        = string
+  default     = ""
+}
+
+variable "valportal_testing_sheet_names" {
+  description = "comma-separated sheet names"
+  type        = string
+  default     = ""
+}
+
+variable "prodportal_testing_sheet_names" {
+  description = "comma-separated sheet names"
+  type        = string
+  default     = ""
+}
+

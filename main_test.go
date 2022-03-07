@@ -888,7 +888,7 @@ func TestRotate(t *testing.T) {
 					SheetGroups: map[Environment]SheetGroup{
 						dev: {
 							AutomatedSheetName: "PasswordManager",
-							SheetName:          sheetNameMACFin,
+							PortalSheetName:    sheetNameMACFin,
 						},
 					},
 				}
@@ -908,7 +908,7 @@ func TestRotate(t *testing.T) {
 					AutomatedSheetName:           input.SheetGroups[dev].AutomatedSheetName,
 					AutomatedSheetColNameToIndex: input.AutomatedSheetColNameToIndex,
 					RowOffset:                    input.RowOffset,
-					SheetName:                    input.SheetGroups[dev].SheetName,
+					SheetName:                    input.SheetGroups[dev].PortalSheetName,
 					UsernameHeader:               input.UsernameHeader,
 					PasswordHeader:               input.PasswordHeader,
 				}
