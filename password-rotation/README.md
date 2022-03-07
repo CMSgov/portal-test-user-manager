@@ -14,7 +14,7 @@ For example, the dev portal may be associated with 4 testing sheets. The test sh
 DEV, TEST, IMPL, DEVP. By associatng the dev portal sheet (say, `Portal-DEV`) with the test sheets, the application updates usernames in the test sheets with the current password.
 For this example, set the variable `devportal_testing_sheet_names` to a string of comma-separated testing sheet names.
 
-If the portal has no associated testing sheets then set the variable to an empty string `""` or remove the variable from the module since it's default value is `""`.
+If the portal has no associated testing sheets then set the variable to an empty string `""` or remove the variable from the module since its default value is `""`.
 ```
 module "password-rotation" {
   source      = "github.com/CMSgov/portal-test-user-manager//password-rotation
