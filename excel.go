@@ -71,6 +71,15 @@ func validateSheetCols(f *excelize.File, input *Input, group SheetGroup, sheetNa
 	return nil
 }
 
+func getTestingSheets(envVar string) []string {
+	sheets := os.Getenv(envVar)
+	if sheets == "" {
+		return []string{}
+	}
+
+	return strings.Split(sheets, ",")
+}
+
 func updateTestingSheets(f *excelize.File, input *Input, env Environment, client S3ClientAPI) error {
 	sheetList := f.GetSheetList()
 	if group, ok := input.SheetGroups[env]; ok {
@@ -80,11 +89,6 @@ func updateTestingSheets(f *excelize.File, input *Input, env Environment, client
 		}
 		for _, sh := range group.TestingSheetNames {
 			sheet := strings.TrimSpace(sh)
-
-			// if environment variable that sets sheet names for this environment is not configured, continue
-			if len(group.TestingSheetNames) == 1 && sheet == "" {
-				continue
-			}
 
 			// if sheet is not in file, continue
 			if !contains(sheetList, sheet) {

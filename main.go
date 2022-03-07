@@ -7,7 +7,6 @@ import (
 	"net/http/cookiejar"
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/xuri/excelize/v2"
@@ -296,17 +295,17 @@ func main() {
 			dev: {
 				AutomatedSheetName: "PasswordManager-DEV",
 				PortalSheetName:    os.Getenv("PORTALSHEETNAMEDEV"),
-				TestingSheetNames:  strings.Split(os.Getenv("DEVPORTALTESTINGSHEETNAMES"), ","),
+				TestingSheetNames:  getTestingSheets("DEVPORTALTESTINGSHEETNAMES"),
 			},
 			val: {
 				AutomatedSheetName: "PasswordManager-VAL",
 				PortalSheetName:    os.Getenv("PORTALSHEETNAMEVAL"),
-				TestingSheetNames:  strings.Split(os.Getenv("VALPORTALTESTINGSHEETNAMES"), ","),
+				TestingSheetNames:  getTestingSheets("VALPORTALTESTINGSHEETNAMES"),
 			},
 			prod: {
 				AutomatedSheetName: "PasswordManager-PROD",
 				PortalSheetName:    os.Getenv("PORTALSHEETNAMEPROD"),
-				TestingSheetNames:  strings.Split(os.Getenv("PRODPORTALTESTINGSHEETNAMES"), ","),
+				TestingSheetNames:  getTestingSheets("PRODPORTALTESTINGSHEETNAMES"),
 			},
 		},
 	}
